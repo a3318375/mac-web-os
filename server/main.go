@@ -55,6 +55,10 @@ func fail(w http.ResponseWriter, status int, message string) {
 
 func api(scan inventory) http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/paste", pasteHandler(scan))
+	mux.HandleFunc("GET /api/system/metrics", systemMetrics)
+	mux.HandleFunc("GET /api/system/sensors", systemSensors)
+	mux.HandleFunc("GET /api/system/disks/{disk}/details", diskDetailsHandler(scan))
 	mux.HandleFunc("GET /api/disks", func(w http.ResponseWriter, r *http.Request) {
 		disks, err := scan()
 		if err != nil {

@@ -13,88 +13,6 @@ a { color: inherit; text-decoration: none; }
 button { cursor: pointer; }
 :where(a, button):focus-visible { outline: 2px solid #236de2; outline-offset: 2px; }
 
-.dashboard-page {
-  width: min(100%, 1200px);
-  min-height: 100dvh;
-  margin: auto;
-  padding: 36px 28px 94px;
-  --dash-muted: #546273;
-  --dash-line: #e5e9ef;
-  --dash-accent: #2f61bd;
-}
-.dash-head, .dash-identity, .device-meta, .panel-head, .line-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.dash-head {
-  flex-wrap: wrap;
-  min-height: 116px;
-  padding: 20px 24px;
-  border-radius: 18px;
-  background: linear-gradient(110deg, #152132, #263a54);
-  color: white;
-}
-.dash-identity { justify-content: flex-start; gap: 16px; }
-.dash-device {
-  display: grid;
-  width: 50px;
-  height: 50px;
-  place-items: center;
-  border: 1px solid #ffffff2a;
-  border-radius: 13px;
-  color: #b7d1f6;
-  background: #ffffff10;
-}
-.dash-device svg { width: 30px; height: 30px; }
-.dash-kicker { margin: 0 0 3px; color: #c0cddd; font-size: 12px; font-weight: 600; }
-.dash-kicker span { padding: 0 3px; }
-.dash-head h1 { margin: 0; font-size: 29px; line-height: 1.2; font-weight: 650; letter-spacing: -.4px; }
-.device-meta { flex-wrap: wrap; justify-content: flex-end; font-size: 12px; }
-.dash-address { color: #c0cddd; font-variant-numeric: tabular-nums; }
-.dash-open { padding: 7px 11px; border: 1px solid #ffffff38; border-radius: 8px; background: #ffffff14; }
-.dash-open:hover { background: #ffffff27; }
-.dash-open span { margin-left: 5px; }
-
-.dash-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-block: 16px; }
-.dash-card, .dash-panel { padding: 17px 20px; border: 1px solid var(--dash-line); border-radius: 14px; background: white; box-shadow: 0 1px 2px #16223907; }
-.dash-card h2, .dash-panel h2 { margin: 0; font-weight: 650; font-size: 14px; }
-.dash-card h2, .muted { color: var(--dash-muted); }
-.dash-card p { margin: 7px 0 0; font-size: 12px; }
-.metric { margin-block: 5px 10px; font-size: clamp(22px, 3vw, 30px); font-weight: 650; line-height: 1.2; font-variant-numeric: tabular-nums; }
-.track { height: 4px; overflow: hidden; border-radius: 8px; background: #edf1f6; }
-.track span { display: block; height: 100%; border-radius: inherit; background: var(--dash-accent); }
-
-.dash-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 14px; }
-.panel-head { margin-bottom: 12px; }
-.panel-head .muted { font-size: 12px; }
-.trend svg { display: block; width: 100%; height: auto; max-height: 180px; }
-.legend, .chart-time { display: flex; gap: 12px; font-size: 11px; }
-.legend { justify-content: flex-end; color: #305bb8; }
-.legend span + span { color: #00796c; }
-.chart-time { justify-content: space-between; padding-left: 6%; margin-top: 4px; }
-.dash-storage { display: flex; gap: 14px; align-items: center; margin: 4px 0 16px; }
-.dash-storage > div:last-child { display: grid; gap: 4px; }
-.dash-storage > div:last-child strong { font-size: 23px; line-height: 1; }
-.dash-storage > div:last-child span { color: var(--dash-muted); font-size: 11px; }
-.pool-ring {
-  display: flex;
-  flex: 0 0 90px;
-  aspect-ratio: 1;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: radial-gradient(closest-side, white 82%, transparent 84%), conic-gradient(var(--dash-accent) 67.5%, #eaf0f8 0);
-}
-.pool-ring strong { font-size: 22px; line-height: 1.15; }
-.pool-ring span { color: var(--dash-muted); font-size: 10px; }
-.line-item { padding: 9px 0; border-top: 1px solid var(--dash-line); font-size: 12px; }
-.line-item:last-child { padding-bottom: 0; }
-.activity { display: flex; align-items: center; gap: 7px; }
-.activity::before { width: 6px; height: 6px; border-radius: 50%; background: #17885f; content: ""; }
-
 .dock {
   --dock-size: min(var(--dock-preferred-size, 45px), (100vw - 60px) / 5);
   position: fixed;
@@ -226,16 +144,6 @@ button { cursor: pointer; }
 }
 .dock-reset:hover { background: #0000000a; }
 
-@media (max-width: 700px) {
-  .dashboard-page { padding: 18px 14px 90px; }
-  .dash-head, .dash-panel, .dash-card { padding: 13px; }
-  .dash-grid { grid-template-columns: minmax(0, 1fr); }
-  .dash-metrics { gap: 8px; }
-  .dash-card h2, .dash-card p { font-size: 11px; }
-}
-@media (max-width: 420px) {
-  .dash-metrics { grid-template-columns: minmax(0, 1fr); }
-}
 @media (prefers-reduced-motion: reduce) {
   .dock-icon { transition: none; }
 }

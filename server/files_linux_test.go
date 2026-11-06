@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -9,6 +11,46 @@ import (
 
 	"golang.org/x/sys/unix"
 )
+
+func TestCopyFileKeepsExistingFilesAndCleansUpOnCancel(t *testing.T) {
+	root := t.TempDir()
+	var stat unix.Statx_t
+	if err := unix.Statx(unix.AT_FDCWD, root, 0, unix.STATX_MNT_ID, &stat); err != nil {
+		t.Fatal(err)
+	}
+	v := volume{ID: fmt.Sprint(stat.Mnt_id), Mount: root}
+	for _, directory := range []string{"target", "cancelled"} {
+		if err := os.Mkdir(filepath.Join(root, directory), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	source := filepath.Join(root, "hello.txt")
+	if err := os.WriteFile(source, []byte("hello"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := copyFile(context.Background(), v, "hello.txt", v, "target"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(source, []byte("changed"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := copyFile(context.Background(), v, "hello.txt", v, "target"); !errors.Is(err, os.ErrExist) {
+		t.Fatalf("expected existing file error, got %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(root, "target", "hello.txt"))
+	if err != nil || string(got) != "hello" {
+		t.Fatalf("copied file: %q, %v", got, err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := copyFile(ctx, v, "hello.txt", v, "cancelled"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected cancellation, got %v", err)
+	}
+	entries, err := os.ReadDir(filepath.Join(root, "cancelled"))
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("cancelled copy left files: %v, %v", entries, err)
+	}
+}
 
 func TestOpenVolumeRejectsLinksAndSpecialFiles(t *testing.T) {
 	root := t.TempDir()

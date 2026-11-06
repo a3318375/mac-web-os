@@ -138,6 +138,23 @@
 .finder-menu button { display: block; width: 100%; height: 24px; padding-inline: 8px; border-radius: 6px; text-align: left; }
 .finder-menu button:hover:not(:disabled), .finder-menu button:focus-visible { background: var(--finder-accent); color: white; }
 .finder-menu hr { margin: 5px 6px; border: 0; border-top: 1px solid #0002; }
+.finder-context-menu { position: fixed; inset: auto; z-index: 6; width: 180px; }
+.finder-context-menu:focus { outline: none; }
+.finder-context-menu button { display: flex; align-items: center; justify-content: space-between; }
+.finder-context-menu button span { opacity: .65; }
+.finder-file-message {
+  position: absolute;
+  z-index: 3;
+  right: 16px;
+  bottom: 42px;
+  max-width: calc(100% - 32px);
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 9px;
+  background: #f7f7f7f5;
+  box-shadow: 0 4px 18px #0001;
+}
 
 .finder-browser { position: relative; flex: 1; min-height: 0; overflow: auto; }
 .finder-list {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"cmp"
 	"os"
 	"path/filepath"
 	"slices"
@@ -10,17 +11,39 @@ import (
 )
 
 type volume struct {
-	ID    string `json:"id"`
-	Mount string `json:"mount"`
+	ID       string `json:"id"`
+	Mount    string `json:"mount"`
+	fsDevice string
 }
 type disk struct {
-	ID      string   `json:"id"`
-	Model   string   `json:"model"`
-	Kind    string   `json:"kind"`
-	Bytes   uint64   `json:"bytes"`
-	System  bool     `json:"system"`
-	MayWake bool     `json:"mayWake"`
-	Volumes []volume `json:"volumes"`
+	ID          string   `json:"id"`
+	Model       string   `json:"model"`
+	Kind        string   `json:"kind"`
+	Bytes       uint64   `json:"bytes"`
+	System      bool     `json:"system"`
+	MayWake     bool     `json:"mayWake"`
+	Volumes     []volume `json:"volumes"`
+	Unallocated uint64   `json:"unallocated,omitempty"`
+}
+
+type sectorRange struct{ start, end uint64 }
+
+func unallocatedSectors(total uint64, ranges []sectorRange) uint64 {
+	// An empty kernel partition list can also mean a whole-disk filesystem.
+	if len(ranges) == 0 {
+		return 0
+	}
+	slices.SortFunc(ranges, func(a, b sectorRange) int {
+		return cmp.Compare(a.start, b.start)
+	})
+	var allocated, end uint64
+	for _, part := range ranges {
+		if part.end > end {
+			allocated += part.end - max(part.start, end)
+			end = part.end
+		}
+	}
+	return total - allocated
 }
 
 func readMetadata(path string) string {
@@ -66,6 +89,8 @@ func discover(sys, mountinfo string) ([]*disk, error) {
 		disks = append(disks, d)
 		byDevice[majorMinor], byName[name] = d, d
 		children, _ := os.ReadDir(base)
+		var partitions []sectorRange
+		validRanges := true
 		for _, child := range children {
 			part := filepath.Join(base, child.Name())
 			if readMetadata(filepath.Join(part, "partition")) == "" {
@@ -74,6 +99,16 @@ func discover(sys, mountinfo string) ([]*disk, error) {
 			if id := readMetadata(filepath.Join(part, "dev")); id != "" {
 				byDevice[id], byName[child.Name()] = d, d
 			}
+			start, startErr := strconv.ParseUint(readMetadata(filepath.Join(part, "start")), 10, 64)
+			size, sizeErr := strconv.ParseUint(readMetadata(filepath.Join(part, "size")), 10, 64)
+			if startErr != nil || sizeErr != nil || start > sectors || size > sectors-start {
+				validRanges = false
+				continue
+			}
+			partitions = append(partitions, sectorRange{start, start + size})
+		}
+		if validRanges {
+			d.Unallocated = unallocatedSectors(sectors, partitions) * 512
 		}
 	}
 
@@ -111,6 +146,11 @@ func discover(sys, mountinfo string) ([]*disk, error) {
 		backing []*disk
 		risk    bool
 	}
+	type mountPath struct {
+		parent, target string
+		safe           bool
+	}
+	paths := map[string]mountPath{}
 	mounts := map[string]mounted{}
 	scan := bufio.NewScanner(file)
 	scan.Buffer(make([]byte, 4096), 1024*1024)
@@ -128,6 +168,12 @@ func discover(sys, mountinfo string) ([]*disk, error) {
 				backing = []*disk{d}
 			}
 		}
+		safe := fs[0] == "tmpfs"
+		switch fs[0] {
+		case "ext2", "ext3", "ext4", "xfs", "f2fs", "vfat", "exfat", "ntfs3":
+			safe = len(backing) == 1 && backing[0].Kind == "ssd"
+		}
+		paths[fields[0]] = mountPath{fields[1], target, safe}
 		if len(backing) == 0 {
 			continue
 		}
@@ -141,13 +187,33 @@ func discover(sys, mountinfo string) ([]*disk, error) {
 		// Keep one mount per device and filesystem root, preferring its primary path.
 		key := fields[2] + ":" + fields[3]
 		if old, found := mounts[key]; !found || len(target) < len(old.Mount) {
-			mounts[key] = mounted{volume{fields[0], target}, backing, risk}
+			v := volume{ID: fields[0], Mount: target}
+			if safe && fs[0] != "tmpfs" {
+				v.fsDevice = fields[2]
+			}
+			mounts[key] = mounted{v, backing, risk}
 		}
 	}
 	if err := scan.Err(); err != nil {
 		return nil, err
 	}
+	pathIsSafe := func(id string) bool {
+		for range len(paths) {
+			mount := paths[id]
+			if !mount.safe {
+				return false
+			}
+			if mount.target == "/" {
+				return true
+			}
+			id = mount.parent
+		}
+		return false
+	}
 	for _, mount := range mounts {
+		if mount.fsDevice != "" && !pathIsSafe(mount.ID) {
+			mount.fsDevice = ""
+		}
 		for _, d := range mount.backing {
 			d.Volumes = append(d.Volumes, mount.volume)
 			d.MayWake = d.MayWake || mount.risk

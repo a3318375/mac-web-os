@@ -32,10 +32,13 @@ func TestDiscoveryAndProtectedDiskGate(t *testing.T) {
 	}
 	write("block/sda/sda1/partition", "1")
 	write("block/sda/sda1/dev", "8:1")
+	write("block/sda/sda1/start", "100")
+	write("block/sda/sda1/size", "1800")
 	write("dev/block/dm0/slaves/sda1/dev", "8:1")
 	write("mountinfo", `31 1 dm0 / / rw - ext4 /dev/dm-0 rw
 34 31 8:16 / /mnt/ssd rw - ext4 /dev/sdb rw
 35 31 8:48 / /mnt/cold\040disk rw - ext4 /dev/sdd rw
+39 35 8:32 / /mnt/cold\040disk/nested rw - ext4 /dev/sdc rw
 36 31 8:48 / /mnt/longer-alias rw - ext4 /dev/sdd rw
 37 31 0:7 / /proc rw - proc proc rw
 `)
@@ -64,9 +67,21 @@ func TestDiscoveryAndProtectedDiskGate(t *testing.T) {
 	if disks[1].MayWake || len(disks[4].Volumes) != 0 {
 		t.Fatal("unexpected SSD or unmounted-disk state")
 	}
+	if disks[0].Unallocated != 200*512 || disks[4].Unallocated != 0 {
+		t.Fatal("unexpected unpartitioned space")
+	}
+	internal, err := scan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if internal[0].Volumes[0].fsDevice == "" || internal[1].Volumes[0].fsDevice == "" || internal[2].Volumes[0].fsDevice != "" {
+		t.Fatal("only SSD filesystems reachable without crossing a mechanical mount should be probed")
+	}
 	for url, want := range map[string]int{
 		"/api/disks/sda/entries?volume=31":                          409,
 		"/api/disks/sdd/file?volume=35&path=video.mp4":              409,
+		"/api/system/disks/sdd/details?confirmed=1":                 409,
+		"/api/system/disks/sde/details":                             409,
 		"/api/disks/sdb/entries?volume=missing":                     404,
 		"/api/disks/sdd/file?volume=35&confirmed=1&path=../private": 400,
 	} {
