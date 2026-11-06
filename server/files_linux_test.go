@@ -52,6 +52,38 @@ func TestCopyFileKeepsExistingFilesAndCleansUpOnCancel(t *testing.T) {
 	}
 }
 
+func TestCopyDirectory(t *testing.T) {
+	root := t.TempDir()
+	var stat unix.Statx_t
+	if err := unix.Statx(unix.AT_FDCWD, root, 0, unix.STATX_MNT_ID, &stat); err != nil {
+		t.Fatal(err)
+	}
+	v := volume{ID: fmt.Sprint(stat.Mnt_id), Mount: root}
+	for _, dir := range []string{"source/child/empty", "target"} {
+		if err := os.MkdirAll(filepath.Join(root, dir), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "source/child/file"), []byte("data"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := copyFile(context.Background(), v, "source", v, "source/child"); !errors.Is(err, errCopyIntoSource) {
+		t.Fatalf("copy into child: %v", err)
+	}
+	if err := copyFile(context.Background(), v, "source", v, "target"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.ReadFile(filepath.Join(root, "target/source/child/file")); err != nil || string(got) != "data" {
+		t.Fatalf("nested file: %q, %v", got, err)
+	}
+	if _, err := os.ReadDir(filepath.Join(root, "target/source/child/empty")); err != nil {
+		t.Fatal(err)
+	}
+	if err := copyFile(context.Background(), v, "source", v, "target"); !errors.Is(err, os.ErrExist) {
+		t.Fatalf("copy over existing directory: %v", err)
+	}
+}
+
 func TestOpenVolumeRejectsLinksAndSpecialFiles(t *testing.T) {
 	root := t.TempDir()
 	var info unix.Statx_t

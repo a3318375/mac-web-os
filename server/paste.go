@@ -1,13 +1,15 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io/fs"
 	"net/http"
-	"os"
 	"path"
 )
+
+var errCopyIntoSource = errors.New("cannot copy a directory into itself")
 
 type fileLocation struct {
 	Disk      string `json:"disk"`
@@ -16,7 +18,7 @@ type fileLocation struct {
 	Confirmed bool   `json:"confirmed"`
 }
 
-func pasteHandler(scan inventory) http.HandlerFunc {
+func pasteHandler(scan inventory, tasks *copyTasks) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Content-Type") != "application/json" {
 			fail(w, http.StatusUnsupportedMediaType, "请求格式无效。")
@@ -33,7 +35,8 @@ func pasteHandler(scan inventory) http.HandlerFunc {
 		if request.Target.Path == "" {
 			request.Target.Path = "."
 		}
-		if !fs.ValidPath(request.Source.Path) || request.Source.Path == "." || !fs.ValidPath(request.Target.Path) {
+		if !fs.ValidPath(request.Source.Path) || request.Source.Path == "." || !fs.ValidPath(request.Target.Path) ||
+			!visiblePath(request.Source.Path) || !visiblePath(request.Target.Path) {
 			fail(w, 400, "文件路径无效。")
 			return
 		}
@@ -73,14 +76,8 @@ func pasteHandler(scan inventory) http.HandlerFunc {
 		if target == nil {
 			return
 		}
-		err = copyFile(r.Context(), *source, request.Source.Path, *target, request.Target.Path)
-		switch {
-		case errors.Is(err, os.ErrExist):
-			fail(w, 409, "目标位置已有同名文件。")
-		case err != nil:
-			fail(w, 403, "复制失败。请检查文件、目标位置和可用空间。")
-		default:
-			jsonResponse(w, 201, map[string]string{"name": path.Base(request.Source.Path)})
-		}
+		tasks.submit(w, path.Join(source.Mount, request.Source.Path), path.Join(target.Mount, request.Target.Path), func(ctx context.Context) error {
+			return copyFile(ctx, *source, request.Source.Path, *target, request.Target.Path)
+		})
 	}
 }

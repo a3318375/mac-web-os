@@ -57,6 +57,13 @@
 .overview-metrics, .overview-details { display: grid; gap: 16px; }
 .overview-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .overview-details { grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); align-items: start; margin-top: 16px; }
+.overview-wake-log { list-style: none; margin: 12px 0 0; padding: 0; }
+.overview-wake-log li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 10px 0; font-size: 13px; overflow-wrap: anywhere; }
+.overview-wake-log time { color: #526174; font-variant-numeric: tabular-nums; }
+.overview-wake-log small { color: #526174; font-size: 12px; }
+.overview-wake-state { margin-inline-start: auto; padding: 3px 9px; border-radius: 999px; background: #edf1f6; color: #425571; white-space: nowrap; }
+.overview-wake-state[data-awake="true"] { background: #e2f4ea; color: #166044; }
+.overview-wake-log li + li { border-top: 1px solid var(--overview-border, #e2e8f0); }
 .overview-panel { min-width: 0; padding: 18px; border: 1px solid var(--overview-line); border-radius: 16px; background: white; box-shadow: 0 2px 5px #23395808; }
 .overview-metric h2 { margin: 0; font-size: 13px; font-weight: 650; }
 .overview-metric .overview-note { overflow-wrap: anywhere; }

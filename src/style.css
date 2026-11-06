@@ -95,6 +95,21 @@ button { cursor: pointer; }
   font-size: 13px;
 }
 .dock-settings h2 { margin: 0 0 10px; font-size: 13px; font-weight: 650; }
+.copy-tasks { width: min(430px, calc(100vw - 24px)); overflow-wrap: anywhere; }
+.copy-tasks header, .copy-task summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.copy-tasks header h2 { margin: 0; }
+.copy-task { padding: 10px 0; border-bottom: 1px solid #0002; }
+.copy-task summary { cursor: pointer; }
+.copy-task summary strong::before { content: '▸ '; }
+.copy-task[open] summary strong::before { content: '▾ '; }
+.copy-task summary span { flex-shrink: 0; color: #43536b; }
+.copy-task summary span[data-state="done"] { color: #176344; }
+.copy-task summary span[data-state="failed"], .copy-task-error { color: #a72f32; }
+.copy-task-progress { display: none; gap: 5px; margin-top: 6px; }
+.copy-task[open] .copy-task-progress { display: grid; }
+.copy-task progress { width: 100%; accent-color: #0074e8; }
+.copy-task p { margin: 5px 0; }
+.copy-task ul { max-height: 160px; overflow: auto; padding-inline-start: 20px; }
 .dock-settings-size {
   display: grid;
   grid-template-columns: 1fr auto;

@@ -3,6 +3,36 @@ import { apiResponse, compareDisks, diskName, formatBytes } from './disks';
 import type { Disk, useDisks } from './disks';
 import './overview.css';
 
+function HddWakeLog() {
+  const [entries, setEntries] = useState<string[]>();
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    apiResponse<string[]>('/api/system/hdd-wake-log', { signal: controller.signal })
+      .then(setEntries)
+      .catch(() => { if (!controller.signal.aborted) setFailed(true); });
+    return () => controller.abort();
+  }, []);
+
+  return <section className="overview-panel" aria-labelledby="hdd-wake-title">
+    <div className="overview-panel-head"><h2 id="hdd-wake-title">硬盘唤醒与休眠</h2></div>
+    {entries?.length ? <ul className="overview-wake-log">{entries.map((entry, index) => {
+      const match = entry.match(/^(\S+) .*?hdd-power(?:\[\d+\])?: (.+) \((\/dev\/[^)]+)\): (standby -> active\/idle|active\/idle -> standby)$/);
+      if (!match) return <li key={index}>{entry}</li>;
+      const [, timestamp, volume, device, transition] = match;
+      const awake = transition.startsWith('standby');
+      return <li key={index}>
+        <time dateTime={timestamp}>{timestamp.slice(0, 19).replace('T', ' ')}</time>
+        <span><strong>{volume}</strong> <small>{device}</small></span>
+        <span className="overview-wake-state" data-awake={awake}>{awake ? '被唤醒' : '进入休眠'}</span>
+      </li>;
+    })}</ul> :
+      <p className="overview-note" role="status">{failed ? '无法读取硬盘唤醒记录。' :
+        entries ? '暂无硬盘唤醒记录。' : '正在读取硬盘唤醒记录…'}</p>}
+  </section>;
+}
+
 type Snapshot = {
   at: number;
   cpu: { busy: number; idle: number; logical: number };
@@ -265,6 +295,7 @@ export default function Overview({ inventory }: { inventory: ReturnType<typeof u
             <ul className="overview-disks">{[...disks].sort((a, b) => compareDisks(a, b)).map(disk =>
               <Drive disk={disk} key={`${disk.id}:${disk.kind}:${disk.model}:${disk.bytes}`} />)}</ul>}
         </section>
+        <HddWakeLog />
       </div>
     </div>
   </main>;

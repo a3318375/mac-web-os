@@ -55,9 +55,14 @@ func fail(w http.ResponseWriter, status int, message string) {
 
 func api(scan inventory) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/paste", pasteHandler(scan))
+	tasks := newCopyTasks()
+	mux.HandleFunc("POST /api/paste", pasteHandler(scan, tasks))
+	mux.HandleFunc("POST /api/file-edit", editHandler(scan))
+	mux.HandleFunc("GET /api/copy-tasks", tasks.list)
+	mux.HandleFunc("DELETE /api/copy-tasks", tasks.list)
 	mux.HandleFunc("GET /api/system/metrics", systemMetrics)
 	mux.HandleFunc("GET /api/system/sensors", systemSensors)
+	mux.HandleFunc("GET /api/system/hdd-wake-log", hddWakeLog)
 	mux.HandleFunc("GET /api/system/disks/{disk}/details", diskDetailsHandler(scan))
 	mux.HandleFunc("GET /api/disks", func(w http.ResponseWriter, r *http.Request) {
 		disks, err := scan()
@@ -113,6 +118,10 @@ func api(scan inventory) http.Handler {
 			fail(w, 404, "分区未挂载或已变化。请刷新硬盘。")
 			return
 		}
+		if !visiblePath(relative) {
+			fail(w, 403, "无法读取此路径。")
+			return
+		}
 		file, err := openVolume(*selectedVolume, relative, action == "entries")
 		if err != nil {
 			fail(w, 403, "无法读取此路径。请检查访问权限或从对应的硬盘入口打开。")
@@ -128,6 +137,9 @@ func api(scan inventory) http.Handler {
 			}
 			result := make([]entry, 0, len(items))
 			for _, item := range items {
+				if !visiblePath(item.Name()) {
+					continue
+				}
 				if item.Type()&(fs.ModeSymlink|fs.ModeDevice|fs.ModeNamedPipe|fs.ModeSocket|fs.ModeCharDevice) != 0 {
 					continue
 				}

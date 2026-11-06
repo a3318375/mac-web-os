@@ -108,7 +108,13 @@ function Finder({ path, inventory, disk, confirmed, approve, view, setView, onOp
   const [selected, setSelected] = useState('');
   const [expanded, setExpanded] = useState<string[]>([]);
   const [menu, setMenu] = useState<'sort' | 'more'>();
-  const [context, setContext] = useState<{ x: number; y: number; source?: CopiedFile; directory: string }>();
+  const [context, setContext] = useState<{ x: number; y: number; source?: CopiedFile; directory: string; parent: string; entry?: Entry; sorting?: boolean }>();
+  const [edit, setEdit] = useState<{ directory: string; entry?: Entry }>();
+  const [editError, setEditError] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const editDialog = useRef<HTMLDialogElement>(null);
+  const editInput = useRef<HTMLInputElement>(null);
+  const [pendingCopies, setPendingCopies] = useState<{ id: number; directory: string; url: string; name: string }[]>([]);
   const [fileMessage, setFileMessage] = useState('');
   const [pasting, setPasting] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -206,7 +212,7 @@ function Finder({ path, inventory, disk, confirmed, approve, view, setView, onOp
     path && !gated && !(listsVolumes && parts.length === 1) && !activeURL ? '分区挂载已变化，请返回硬盘列表。' : ''));
 
   function copySource(entry: Entry, directory: string): CopiedFile | undefined {
-    if (!disk || gated || entry.kind === 'directory') return;
+    if (!disk || gated) return;
     const source = diskLocation(disk, entryPath(directory, entry), confirmed);
     return source && { name: entry.name, source };
   }
@@ -223,6 +229,86 @@ function Finder({ path, inventory, disk, confirmed, approve, view, setView, onOp
     return diskLocation(disk, directory, confirmed);
   }
 
+  useEffect(() => {
+    if (!pendingCopies.length) return;
+    const controller = new AbortController();
+    let timer: number;
+    async function poll() {
+      try {
+        const tasks = await apiResponse<{ id: number; state: string; error: string }[]>('/api/copy-tasks', { signal: controller.signal });
+        if (controller.signal.aborted) return;
+        const finished = pendingCopies.filter(copy => !tasks.some(task => task.id === copy.id && (task.state === 'queued' || task.state === 'running')));
+        for (const copy of finished) {
+          const task = tasks.find(task => task.id === copy.id);
+          setFileMessage(task?.error || (task ? '已粘贴「' + copy.name + '」' : '复制任务记录已清除。'));
+          void readDirectory(copy.directory, copy.url);
+        }
+        if (finished.length) {
+          setPendingCopies(current => current.filter(copy => !finished.some(item => item.id === copy.id)));
+          return;
+        }
+      } catch {}
+      if (!controller.signal.aborted) timer = window.setTimeout(poll, 1000);
+    }
+    timer = window.setTimeout(poll, 1000);
+    return () => { controller.abort(); window.clearTimeout(timer); };
+  }, [pendingCopies]);
+
+  function editItem(directory: string, entry?: Entry) {
+    setContext(undefined);
+    setEditError('');
+    setEdit({ directory, entry });
+  }
+
+  useLayoutEffect(() => {
+    if (!edit) return;
+    editDialog.current?.showModal();
+    editInput.current?.select();
+  }, [edit]);
+
+  function closeEdit(saved = false) {
+    editDialog.current?.close();
+    setEdit(undefined);
+    (saved ? browserRef.current : selectedRef.current ?? browserRef.current)?.focus({ preventScroll: true });
+  }
+
+  async function saveEdit() {
+    if (!edit || savingEdit) return;
+    const { directory, entry } = edit;
+    if (!disk || disk.system || gated) return;
+    const location = diskLocation(disk, directory, confirmed);
+    const url = diskURL(disk, directory, 'entries', confirmed);
+    if (!location || !url) return;
+    const name = editInput.current?.value ?? '';
+    if (name === entry?.name) {
+      closeEdit();
+      return;
+    }
+    if (!name.trim() || name === '.' || name === '..' || /[/\\\x00]/.test(name)) {
+      setEditError('请输入有效名称，名称不能包含路径分隔符。');
+      editInput.current?.focus();
+      return;
+    }
+    setSavingEdit(true);
+    setEditError('');
+    try {
+      await apiResponse('/api/file-edit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ directory: location, name, oldName: entry?.name }),
+      });
+      setSelected('');
+      closeEdit(true);
+      void readDirectory(directory, url);
+      setFileMessage(entry ? '已重命名为「' + name + '」' : '已新建「' + name + '」');
+    } catch (reason) {
+      setEditError(reason instanceof Error ? reason.message : '操作失败。');
+      editInput.current?.focus();
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
   async function paste(directory: string) {
     const target = pasteTarget(directory);
     if (!target || !copied) return;
@@ -233,14 +319,14 @@ function Finder({ path, inventory, disk, confirmed, approve, view, setView, onOp
     setPasting(true);
     setFileMessage('正在粘贴「' + copied.name + '」…');
     try {
-      const result = await apiResponse<{ name: string }>('/api/paste', {
+      const result = await apiResponse<{ id: number }>('/api/paste', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ source: copied.source, target }),
       });
       const url = disk && diskURL(disk, directory, 'entries', confirmed);
-      if (url && (directory === path || contents[directory])) void readDirectory(directory, url);
-      setFileMessage('已粘贴「' + result.name + '」');
+      if (url) setPendingCopies(current => [...current, { id: result.id, directory, url, name: copied.name }]);
+      setFileMessage('已加入复制任务，可在程序坞查看进度。');
     } catch (reason) {
       setFileMessage(reason instanceof Error ? reason.message : '粘贴失败。');
     } finally {
@@ -256,7 +342,9 @@ function Finder({ path, inventory, disk, confirmed, approve, view, setView, onOp
     setMenu(undefined);
     setContext({
       x: Math.max(6, Math.min(event.clientX, window.innerWidth - 186)),
-      y: Math.max(6, Math.min(event.clientY, window.innerHeight - 70)),
+      y: Math.max(6, Math.min(event.clientY, window.innerHeight - 180)),
+      parent: directory,
+      entry,
       source: entry && copySource(entry, directory),
       directory: entry?.kind === 'directory' && directory && key ? key : directory,
     });
@@ -353,8 +441,8 @@ function Finder({ path, inventory, disk, confirmed, approve, view, setView, onOp
       if (!(event.metaKey || event.ctrlKey) || (event.target as Element).closest('input, textarea, [contenteditable]')) return;
       const shortcut = event.key.toLowerCase();
       if (shortcut === 'c' && selected && window.getSelection()?.isCollapsed) {
-        const url = disk && !gated && selectedRef.current?.hasAttribute('download') && diskLocation(disk, selected, confirmed);
-        const name = selectedRef.current?.download;
+        const url = disk && !gated && selectedRef.current && diskLocation(disk, selected, confirmed);
+        const name = selected.split('/').pop();
         if (url && name) { event.preventDefault(); copy({ name, source: url }); }
       }
       if (shortcut === 'v' && copied && pasteTarget(path)) {
@@ -471,9 +559,61 @@ function Finder({ path, inventory, disk, confirmed, approve, view, setView, onOp
       </div>
       {context && <div ref={contextRef} tabIndex={-1} className="finder-menu finder-context-menu" aria-label="文件快捷操作"
         style={{ left: context.x, top: context.y }}>
-        <button type="button" disabled={!context.source} onClick={() => { if (context.source) copy(context.source); }}>复制<span>⌘C</span></button>
-        <button type="button" disabled={!copied || !pasteTarget(context.directory)} onClick={() => void paste(context.directory)}>粘贴项目<span>⌘V</span></button>
+        {context.entry ? <>
+          <button type="button" onClick={() => { selectedRef.current?.click(); setContext(undefined); }}>打开</button>
+          {context.entry.kind !== 'directory' && context.source && disk && <button type="button" onClick={() => {
+            const url = diskURL(disk, entryPath(context.parent, context.entry!), 'file', confirmed);
+            if (url) window.location.assign(url + '&download=1');
+            setContext(undefined);
+          }}>下载</button>}
+          {context.source && <button type="button" onClick={() => { if (context.source) copy(context.source); }}>复制<span>⌘C</span></button>}
+          {context.entry.kind === 'directory' && disk && !disk.system &&
+            <button type="button" disabled={!copied || !pasteTarget(context.directory)} onClick={() => void paste(context.directory)}>粘贴到此文件夹</button>}
+          {context.source && disk && !disk.system &&
+            <button type="button" onClick={() => editItem(context.parent, context.entry)}>重命名</button>}
+        </> : <>
+          {activeURL && disk && !disk.system && <>
+            <button type="button" onClick={() => editItem(context.directory)}>新建文件夹</button>
+            <button type="button" disabled={!copied || !pasteTarget(context.directory)} onClick={() => void paste(context.directory)}>粘贴项目<span>⌘V</span></button>
+          </>}
+          <button type="button" onClick={() => {
+            if (activeURL) void readDirectory(path, activeURL);
+            else void inventory.refresh();
+            setContext(undefined);
+          }}>{activeURL ? '刷新当前目录' : '刷新硬盘'}</button>
+          <button type="button" aria-expanded={!!context.sorting} onClick={() => setContext({ ...context, sorting: !context.sorting })}>排序方式<span>›</span></button>
+          {context.sorting && <>
+            <button type="button" onClick={() => { setDescending(false); setContext(undefined); }}>{!descending ? '✓ ' : ''}名称升序</button>
+            <button type="button" onClick={() => { setDescending(true); setContext(undefined); }}>{descending ? '✓ ' : ''}名称降序</button>
+            <button type="button" onClick={() => { setFoldersFirst(!foldersFirst); setContext(undefined); }}>{foldersFirst ? '✓ ' : ''}文件夹排在前面</button>
+          </>}
+        </>}
       </div>}
+      {edit && <dialog ref={editDialog} className="finder-edit-dialog" aria-labelledby="finder-edit-title"
+        onKeyDown={event => event.stopPropagation()} onCancel={event => {
+          event.preventDefault();
+          if (!savingEdit) closeEdit();
+        }}>
+        <form onSubmit={event => { event.preventDefault(); void saveEdit(); }} aria-busy={savingEdit}>
+          <header>
+            <FileIcon type={edit.entry?.kind ?? 'directory'} />
+            <div>
+              <h2 id="finder-edit-title">{edit.entry ? '重命名' : '新建文件夹'}</h2>
+              <p>{edit.entry ? '为所选项目输入新名称' : '在「' + locationName(edit.directory) + '」中创建文件夹'}</p>
+            </div>
+          </header>
+          <label htmlFor="finder-edit-name">名称</label>
+          <input ref={editInput} id="finder-edit-name" autoFocus autoComplete="off" spellCheck={false}
+            defaultValue={edit.entry?.name ?? '新建文件夹'} readOnly={savingEdit}
+            aria-invalid={!!editError} aria-describedby={editError ? 'finder-edit-error' : undefined}
+            onChange={() => setEditError('')} />
+          {editError && <p id="finder-edit-error" className="finder-edit-error" role="alert">{editError}</p>}
+          <footer>
+            <button type="button" disabled={savingEdit} onClick={() => closeEdit()}>取消</button>
+            <button type="submit" disabled={savingEdit}>{savingEdit ? '处理中…' : edit.entry ? '保存' : '创建'}</button>
+          </footer>
+        </form>
+      </dialog>}
       {fileMessage && <p className="finder-file-message" role="status">{fileMessage}</p>}
       {status && <footer className="finder-status">
         <nav aria-label="当前路径"><Link to={root}><Glyph name="disk" />硬盘</Link>

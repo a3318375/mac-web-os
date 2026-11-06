@@ -5,6 +5,7 @@ import { HashRouter, NavLink, Route, Routes, useLocation } from 'react-router-do
 import Overview from './overview';
 import Files from './finder';
 import Reader from './reader';
+import CopyTasks from './copy-tasks';
 import { useDisks } from './disks';
 import type { ReadableFile } from './disks';
 import './style.css';
@@ -55,6 +56,13 @@ function Dock({ readerTitle, onResume }: { readerTitle?: string; onResume: () =>
       </svg></span>
       <span className="dock-label" aria-hidden="true">系统概览</span>
     </NavLink>
+    <button type="button" popoverTarget="dock-copy-tasks" aria-haspopup="dialog" aria-label="复制任务">
+      <span className="dock-icon dock-gear" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <rect x="5" y="3.5" width="14" height="17" rx="3" /><path d="M8 8h8M8 12h8M8 16h5" />
+      </svg></span>
+      <span className="dock-label" aria-hidden="true">复制任务</span>
+    </button>
+    <CopyTasks />
     <button type="button" popoverTarget="dock-settings" aria-haspopup="dialog" aria-label="程序坞设置" className="dock-settings-trigger">
       <span className="dock-icon dock-gear" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round">
         <path d="M10 3h4l.7 2.4 1.3.8 2.5-.6 2 3.4-1.8 1.8v1.6l1.8 1.8-2 3.4-2.5-.6-1.3.8L14 20h-4l-.7-2.2-1.3-.8-2.5.6-2-3.4 1.8-1.8v-1.6L3.5 9l2-3.4 2.5.6 1.3-.8z" />
