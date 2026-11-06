@@ -1,0 +1,46 @@
+name: Build Debian installers
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - run: npm ci
+      - name: Run Go tests on Linux
+        run: go test ./...
+        working-directory: server
+      - name: Build and check both installers
+        run: |
+          npm run package -- amd64
+          node scripts/package-linux.mjs arm64
+          sh -n release/mac-web-os-linux-amd64.sh
+          sh -n release/mac-web-os-linux-arm64.sh
+      - name: Upload amd64 installer
+        uses: actions/upload-artifact@v7
+        with:
+          path: release/mac-web-os-linux-amd64.sh
+          archive: false
+          if-no-files-found: error
+      - name: Upload arm64 installer
+        uses: actions/upload-artifact@v7
+        with:
+          path: release/mac-web-os-linux-arm64.sh
+          archive: false
+          if-no-files-found: error
