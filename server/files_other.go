@@ -7,7 +7,8 @@ import (
 	"os"
 )
 
-func editDirectory(volume, string, string, string) error { return os.ErrInvalid }
+func editDirectory(volume, string, string, string) error                 { return os.ErrInvalid }
+func deleteDirectoryEntry(context.Context, volume, string, string) error { return os.ErrInvalid }
 
 func openVolume(volume, string, bool) (*os.File, error)              { return nil, os.ErrInvalid }
 func entryInfo(*os.File, string) (os.FileInfo, error)                { return nil, os.ErrInvalid }

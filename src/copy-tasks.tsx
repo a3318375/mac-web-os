@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiResponse, formatBytes } from './disks';
+import './copy-tasks.css';
 
 type Task = {
   id: number;
@@ -19,13 +20,12 @@ type Task = {
 const labels = { queued: '排队中', running: '复制中', done: '已完成', failed: '失败' };
 
 export default function CopyTasks() {
-  const [open, setOpen] = useState(false);
   const [tasks, setTasks] = useState<Task[]>();
   const [error, setError] = useState('');
   const [clearing, setClearing] = useState(false);
 
   useEffect(() => {
-    if (!open || clearing) return;
+    if (clearing) return;
     const controller = new AbortController();
     let timer: number;
     async function poll() {
@@ -39,7 +39,7 @@ export default function CopyTasks() {
     }
     void poll();
     return () => { controller.abort(); window.clearTimeout(timer); };
-  }, [open, clearing]);
+  }, [clearing]);
 
   async function clear() {
     setClearing(true);
@@ -53,11 +53,10 @@ export default function CopyTasks() {
     }
   }
 
-  return <section id="dock-copy-tasks" className="dock-settings copy-tasks" popover="auto"
-    role="dialog" aria-labelledby="copy-tasks-title" onToggle={event => setOpen(event.newState === 'open')}>
+  return <section className="copy-tasks" aria-label="复制任务">
     <header>
       <h2 id="copy-tasks-title">复制任务</h2>
-      <button className="dock-reset" type="button" disabled={clearing || !tasks?.some(task => task.state === 'done' || task.state === 'failed')}
+      <button type="button" disabled={clearing || !tasks?.some(task => task.state === 'done' || task.state === 'failed')}
         onClick={() => void clear()}>清除已结束</button>
     </header>
     {error && <p role="status">{error}</p>}

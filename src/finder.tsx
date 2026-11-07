@@ -4,36 +4,13 @@ import { Link, useLocation, useNavigate, useNavigationType } from 'react-router-
 import { apiResponse, compareDisks, diskKind, diskLocation, diskName, diskURL, fileKinds, formatBytes, systemRoot } from './disks';
 import type { Disk, Entry, FileLocation, ReadableFile, useDisks } from './disks';
 import FileText from './file-text';
+import { Folder, Icon } from './ui';
 import './finder.css';
 
 const root = '/files';
 const route = (path = '') => root + (path ? '/' + path.split('/').map(encodeURIComponent).join('/') : '');
 const join = (path: string, name: string) => path ? path + '/' + name : name;
 const segment = (entry: Entry) => entry.segment ?? entry.name;
-
-const symbols = {
-  back: 'm14 5-7 7 7 7', next: 'm10 5 7 7-7 7',
-  icons: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',
-  list: 'M8 5h13M8 12h13M8 19h13M3 5h.1M3 12h.1M3 19h.1',
-  columns: 'M3 4h18v16H3zM9 4v16m6-16v16',
-  gallery: 'M3 3h18v13H3zM4 21h2m4 0h2m4 0h2m3 0h.1',
-  sort: 'M4 4h16v5H4zM4 13h6v7H4zM14 13h6v7h-6z',
-  sidebar: 'M3 4h18v16H3zM9 4v16M5 8h2m-2 3h2m-2 3h2',
-  search: 'M16.5 16.5 22 22M19 11a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z',
-  more: 'M5 12h.1m6.9 0h.1m6.9 0h.1',
-  share: 'M12 15V2m-4 4 4-4 4 4M7 9H4v12h16V9h-3',
-  tag: 'M3 12 12 3h7l2 2v7l-9 9Z M16 8h.1',
-  folder: 'M3 7V5h7l2 2h9v13H3zM3 9h18',
-  file: 'M6 3h8l4 4v14H6zM14 3v5h4',
-  media: 'M3 4h18v16H3zM3 17l6-6 4 4 3-3 5 5m-6-9h.1',
-  video: 'M3 4h18v16H3zM10 8l6 4-6 4z',
-  refresh: 'M20 11a8 8 0 1 0-2 6m2-12v6h-6',
-  disk: 'M6 4h12l3 11v5H3v-5L6 4ZM3 15h18m-5 2.5h.1m2.9 0h.1',
-} as const;
-
-function Glyph({ name }: { name: keyof typeof symbols }) {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={symbols[name]} /></svg>;
-}
 
 const modes = { icons: '图标视图', list: '列表视图', columns: '分栏视图', gallery: '画廊视图' } as const;
 type Mode = keyof typeof modes;
@@ -50,8 +27,10 @@ export default function Files({ onOpenFile, inventory }: { onOpenFile: OpenFile;
   const index: number = window.history.state?.idx ?? 0;
   const [view, setView] = useState<Mode>('list');
   const [sidebar, setSidebar] = useState(true);
-  const [status, setStatus] = useState(true);
-  const [tagged, setTagged] = useState<string[]>([]);
+  const [favorites, setFavorites] = useState<Record<string, boolean>>(() => {
+    try { const stored = JSON.parse(localStorage.getItem('harbor-nas.favorites') ?? '{}'); return stored && !Array.isArray(stored) && typeof stored === 'object' ? Object.fromEntries(Object.entries(stored).filter(([, value]) => typeof value === 'boolean')) as Record<string, boolean> : {}; } catch { return {}; }
+  });
+  useEffect(() => { try { localStorage.setItem('harbor-nas.favorites', JSON.stringify(favorites)); } catch {} }, [favorites]);
   const [copied, setCopied] = useState<CopiedFile>();
   useLayoutEffect(() => {
     if (navigationType === 'PUSH') for (const entry of historyPaths.keys()) {
@@ -60,8 +39,11 @@ export default function Files({ onOpenFile, inventory }: { onOpenFile: OpenFile;
     historyPaths.set(index, pathname);
   }, [index, navigationType, pathname]);
 
-  let path = '';
-  try { path = decodeURIComponent(pathname.slice(root.length + 1)); } catch {}
+  const lastPath = useRef('');
+  if (pathname === root || pathname.startsWith(root + '/')) {
+    try { lastPath.current = decodeURIComponent(pathname.slice(root.length + 1)); } catch { lastPath.current = ''; }
+  }
+  const path = lastPath.current;
   const disk = inventory.disks.find(device => device.id === path.split('/')[0]);
   const diskKey = disk ? [disk.id, ...disk.volumes.map(volume => volume.id)].join(':') : '';
   const [approved, setApproved] = useState('');
@@ -72,8 +54,9 @@ export default function Files({ onOpenFile, inventory }: { onOpenFile: OpenFile;
 
   return <Finder key={pathname + ':' + diskKey} path={path} inventory={inventory} disk={disk} confirmed={confirmed} approve={() => setApproved(diskKey)} view={view} setView={setView} onOpenFile={onOpenFile}
     sidebar={sidebar} toggleSidebar={() => setSidebar(!sidebar)} copied={copied} setCopied={setCopied}
-    status={status} toggleStatus={() => setStatus(!status)}
-    tagged={tagged} toggleTag={key => setTagged(items => items.includes(key) ? items.filter(item => item !== key) : [...items, key])}
+    favorites={favorites} toggleTag={(key, folder) => setFavorites(items => {
+      const next = { ...items }; if (key in next) delete next[key]; else next[key] = folder; return next;
+    })} updateFavorites={(oldKey, newKey) => setFavorites(items => Object.fromEntries(Object.entries(items).flatMap(([key, folder]) => key === oldKey || key.startsWith(oldKey + '/') ? newKey ? [[newKey + key.slice(oldKey.length), folder]] : [] : [[key, folder]])))}
     back={historyPaths.has(index - 1) ? () => navigate(-1) : path ? () => navigate(route(path.split('/').slice(0, -1).join('/'))) : undefined}
     forward={navigationType === 'POP' && historyPaths.has(index + 1) ? () => navigate(1) : undefined} />;
 }
@@ -91,33 +74,37 @@ type FinderProps = {
   onOpenFile: OpenFile;
   sidebar: boolean;
   toggleSidebar: () => void;
-  status: boolean;
-  toggleStatus: () => void;
-  tagged: string[];
-  toggleTag: (key: string) => void;
+  favorites: Record<string, boolean>;
+  toggleTag: (key: string, folder: boolean) => void;
+  updateFavorites: (oldKey: string, newKey?: string) => void;
   back?: () => void;
   forward?: () => void;
 };
 
-function Finder({ path, inventory, disk, confirmed, approve, view, setView, onOpenFile, sidebar, toggleSidebar, status, toggleStatus, tagged, toggleTag, back, forward, copied, setCopied }: FinderProps) {
+function Finder({ path, inventory, disk, confirmed, approve, view, setView, onOpenFile, sidebar, toggleSidebar, favorites, toggleTag, updateFavorites, back, forward, copied, setCopied }: FinderProps) {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
-  const [searching, setSearching] = useState(false);
+  const searchInput = useRef<HTMLInputElement>(null);
   const [descending, setDescending] = useState(false);
   const [foldersFirst, setFoldersFirst] = useState(true);
-  const [selected, setSelected] = useState('');
+  const { state } = useLocation();
+  const [selected, setSelected] = useState<string>(typeof state?.selection === 'string' ? state.selection : '');
+  useEffect(() => { if (typeof state?.selection === 'string') setSelected(state.selection); }, [state?.selection]);
+  const tagged = Object.keys(favorites);
   const [expanded, setExpanded] = useState<string[]>([]);
-  const [menu, setMenu] = useState<'sort' | 'more'>();
-  const [context, setContext] = useState<{ x: number; y: number; source?: CopiedFile; directory: string; parent: string; entry?: Entry; sorting?: boolean }>();
+  const [context, setContext] = useState<{ x: number; y: number; source?: CopiedFile; directory: string; parent: string; entry?: Entry }>();
   const [edit, setEdit] = useState<{ directory: string; entry?: Entry }>();
   const [editError, setEditError] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
+  const [action, setAction] = useState<{ kind: 'delete' | 'details' | 'wake'; directory: string; entry?: Entry }>();
+  const actionDialog = useRef<HTMLDialogElement>(null);
+  const [actionError, setActionError] = useState('');
+  const [deleting, setDeleting] = useState(false);
   const editDialog = useRef<HTMLDialogElement>(null);
   const editInput = useRef<HTMLInputElement>(null);
   const [pendingCopies, setPendingCopies] = useState<{ id: number; directory: string; url: string; name: string }[]>([]);
   const [fileMessage, setFileMessage] = useState('');
   const [pasting, setPasting] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
   const contextRef = useRef<HTMLDivElement>(null);
   const browserRef = useRef<HTMLDivElement>(null);
   const selectedRef = useRef<HTMLAnchorElement>(null);
@@ -138,7 +125,6 @@ function Finder({ path, inventory, disk, confirmed, approve, view, setView, onOp
   const gated = !!disk && disk.volumes.length > 0 && (disk.system || disk.mayWake) && !confirmed;
   const activeURL = disk && !gated ? diskURL(disk, path, 'entries', confirmed) : undefined;
   const listsVolumes = !!disk && disk.volumes.length > 1 && !rootVolume;
-  const title = path ? locationName(path) : '硬盘';
 
   function entryPath(directory: string, entry: Entry) {
     return join(directory === disk?.id && rootVolumePath ? rootVolumePath : directory, segment(entry));
@@ -202,6 +188,8 @@ function Finder({ path, inventory, disk, confirmed, approve, view, setView, onOp
   }
 
   const rows = getRows(path);
+  const selection = rows.find(entry => entryPath(path, entry) === selected);
+  const selectedItem = selection ? { entry: selection, directory: path } : Object.entries(contents).flatMap(([directory, data]) => data.entries.map(entry => ({ entry, directory }))).find(item => entryPath(item.directory, item.entry) === selected);
   const preview = rows.find(entry => entryPath(path, entry) === selected) ?? rows[0];
   const previewURL = preview && disk && !gated && preview.kind !== 'directory'
     ? diskURL(disk, entryPath(path, preview), 'file', confirmed) : undefined;
@@ -272,6 +260,32 @@ function Finder({ path, inventory, disk, confirmed, approve, view, setView, onOp
     (saved ? browserRef.current : selectedRef.current ?? browserRef.current)?.focus({ preventScroll: true });
   }
 
+  function inspect(kind: 'delete' | 'details', directory: string, entry: Entry) {
+    setContext(undefined); setActionError(''); setAction({ kind, directory, entry });
+  }
+  useLayoutEffect(() => { if (action) actionDialog.current?.showModal(); }, [action]);
+  function closeAction() { actionDialog.current?.close(); setAction(undefined); setActionError(''); }
+  async function deleteItem() {
+    if (!action?.entry || !disk || disk.system || gated || deleting) return;
+    const directory = diskLocation(disk, action.directory, confirmed);
+    const url = diskURL(disk, action.directory, 'entries', confirmed);
+    if (!directory || !url) return;
+    setDeleting(true); setActionError('');
+    try {
+      await apiResponse('/api/file-edit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', confirmDelete: true, directory, name: action.entry.name }) });
+      updateFavorites(entryPath(action.directory, action.entry));
+      setSelected(''); setExpanded([]); setFileMessage('已永久删除「' + action.entry.name + '」'); closeAction();
+    } catch (reason) { setActionError(reason instanceof Error ? reason.message : '删除未完成，请刷新检查。'); }
+    finally { setDeleting(false); void readDirectory(action.directory, url); }
+  }
+
+  async function copyLink(key: string) {
+    const url = new URL(location.href); url.hash = route(key);
+    try { await navigator.clipboard.writeText(url.href); setFileMessage('已复制位置链接'); }
+    catch { setFileMessage('无法访问剪贴板。位置链接：' + url.href); }
+    setContext(undefined);
+  }
+
   async function saveEdit() {
     if (!edit || savingEdit) return;
     const { directory, entry } = edit;
@@ -297,6 +311,7 @@ function Finder({ path, inventory, disk, confirmed, approve, view, setView, onOp
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ directory: location, name, oldName: entry?.name }),
       });
+      if (entry) updateFavorites(entryPath(directory, entry), entryPath(directory, { ...entry, name }));
       setSelected('');
       closeEdit(true);
       void readDirectory(directory, url);
@@ -309,13 +324,13 @@ function Finder({ path, inventory, disk, confirmed, approve, view, setView, onOp
     }
   }
 
-  async function paste(directory: string) {
+  async function paste(directory: string, sourceApproved = false) {
     const target = pasteTarget(directory);
     if (!target || !copied) return;
     setContext(undefined);
     browserRef.current?.focus({ preventScroll: true });
     const sourceDisk = disks.find(device => device.id === copied.source.disk);
-    if (sourceDisk?.mayWake && sourceDisk.id !== target.disk && !window.confirm('读取源文件可能唤醒机械盘。继续粘贴？')) return;
+    if (sourceDisk?.mayWake && sourceDisk.id !== target.disk && !sourceApproved) { setActionError(''); setAction({ kind: 'wake', directory }); return; }
     setPasting(true);
     setFileMessage('正在粘贴「' + copied.name + '」…');
     try {
@@ -337,12 +352,15 @@ function Finder({ path, inventory, disk, confirmed, approve, view, setView, onOp
   function showContext(event: MouseEvent, entry?: Entry, directory = path) {
     event.preventDefault();
     event.stopPropagation();
+    showFileMenu(event.clientX, event.clientY, entry, directory);
+  }
+
+  function showFileMenu(x: number, y: number, entry?: Entry, directory = path) {
     const key = entry && entryPath(directory, entry);
     if (key) setSelected(key);
-    setMenu(undefined);
     setContext({
-      x: Math.max(6, Math.min(event.clientX, window.innerWidth - 186)),
-      y: Math.max(6, Math.min(event.clientY, window.innerHeight - 180)),
+      x: Math.max(6, Math.min(x, window.innerWidth - 238)),
+      y: Math.max(6, Math.min(y, window.innerHeight - 390)),
       parent: directory,
       entry,
       source: entry && copySource(entry, directory),
@@ -373,7 +391,7 @@ function Finder({ path, inventory, disk, confirmed, approve, view, setView, onOp
       onDoubleClick={event => {
         if (modified(event) || (folder && openFolderOnClick)) return;
         open(event.currentTarget);
-      }}>{children}{tagged.includes(key) && <i className="finder-tag" aria-label="蓝色标签" />}</a>;
+      }}>{children}{tagged.includes(key) && <i className="finder-tag" aria-label="已收藏" />}</a>;
   }
 
   function listRows(entries: Entry[], directory: string, depth = 0): ReactNode {
@@ -391,25 +409,22 @@ function Finder({ path, inventory, disk, confirmed, approve, view, setView, onOp
               setExpanded(open ? expanded.filter(value => value !== key) : [...expanded, key]);
               const url = disk && !gated ? diskURL(disk, key, 'entries', confirmed) : undefined;
               if (!open && url && !contents[key]?.entries.length) void readDirectory(key, url);
-            }}><Glyph name="next" /></button>
+            }}><Icon name="right" /></button>
             : <span className="finder-disclosure" />}
           {item(entry, directory, <><FileIcon type={kind} />{name}</>)}
         </div></td>
-        <td>{modified ? new Date(modified).toLocaleString('zh-CN') : '—'}</td><td>{!folder || bytes ? formatBytes(bytes) : '—'}</td><td>{detail ?? fileKinds[kind]}</td>
+        <td>{modified ? new Date(modified).toLocaleString('zh-CN') : '—'}</td><td>{disk ? diskName(disk) : name}</td><td>{detail ?? fileKinds[kind]}</td><td>{!folder || bytes ? formatBytes(bytes) : '—'}</td>
       </tr>;
       if (!open) return [row];
       const children = getRows(key);
       return children.length ? [row, listRows(children, key, depth + 1)] : [
-        row, <tr key={key + ':empty'}><td colSpan={4} style={{ paddingInlineStart: 28 + depth * 15 }}>
+        row, <tr key={key + ':empty'}><td colSpan={5} style={{ paddingInlineStart: 28 + depth * 15 }}>
           {contents[key]?.error ?? (contents[key] ? '此目录为空' : '正在读取目录…')}
         </td></tr>,
       ];
     });
   }
 
-  function showMenu(which: 'sort' | 'more') {
-    setMenu(menu === which ? undefined : which);
-  }
 
   useEffect(() => {
     if (document.activeElement === document.body) browserRef.current?.focus({ preventScroll: true });
@@ -417,26 +432,29 @@ function Finder({ path, inventory, disk, confirmed, approve, view, setView, onOp
 
   useEffect(() => {
     if (!context) return;
+    contextRef.current?.showPopover();
     const dismiss = (event: PointerEvent) => {
       if (!contextRef.current?.contains(event.target as Node)) setContext(undefined);
     };
     document.addEventListener('pointerdown', dismiss);
     contextRef.current?.focus({ preventScroll: true });
-    return () => document.removeEventListener('pointerdown', dismiss);
+    return () => { document.removeEventListener('pointerdown', dismiss); contextRef.current?.hidePopover(); };
   }, [context]);
 
   return <section className="finder" data-sidebar={sidebar} aria-label="文件管理"
-    onPointerDown={event => { if (!menuRef.current?.contains(event.target as Node)) setMenu(undefined); }}
     onKeyDown={event => {
       if (event.key === 'Escape') {
         if (context) { setContext(undefined); (selectedRef.current ?? browserRef.current)?.focus({ preventScroll: true }); }
-        else if (menu) setMenu(undefined);
-        else if (searching) { setQuery(''); setSearching(false); }
+        else if (query) setQuery('');
         else setSelected('');
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
         event.preventDefault();
-        setSearching(true);
+        searchInput.current?.focus();
+      }
+      if (event.shiftKey && event.key === 'F10' && selectedItem) {
+        event.preventDefault(); const rect = selectedRef.current?.getBoundingClientRect();
+        showFileMenu(rect?.left ?? 100, rect?.bottom ?? 100, selectedItem.entry, selectedItem.directory);
       }
       if (!(event.metaKey || event.ctrlKey) || (event.target as Element).closest('input, textarea, [contenteditable]')) return;
       const shortcut = event.key.toLowerCase();
@@ -450,90 +468,50 @@ function Finder({ path, inventory, disk, confirmed, approve, view, setView, onOp
         void paste(path);
       }
     }}>
-    <aside className="finder-sidebar">
-      <div className="finder-sidebar-head">
-        <div className="finder-lights">
-          <Link to="/" aria-label="关闭文件管理" title="关闭文件管理" />
-          <Link to="/" state={{ finderResume: route(path) }} aria-label="将文件管理收起到程序坞" title="最小化" />
-          <button type="button" aria-label="切换全屏" title="切换全屏" onClick={() => {
-            const transition = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
-            void transition.catch(() => {});
-          }} />
-        </div>
-        <button className="finder-pill finder-sidebar-toggle" type="button" aria-label="隐藏边栏" onClick={toggleSidebar}><Glyph name="sidebar" /></button>
-      </div>
-      <nav aria-label="Finder 边栏">
-        <Link to={root} aria-current={!path ? 'location' : undefined}><Glyph name="disk" />所有硬盘</Link>
-        <p>位置</p>
-        {disks.map(device => <Link key={device.id} to={route(device.id)} aria-current={device.id === disk?.id ? 'location' : undefined}
+    <aside className="fp-sidebar finder-sidebar">
+      <nav aria-label="硬盘位置">
+        <Link to={root} data-active={!path} aria-current={!path ? 'location' : undefined}><Icon name="apps" /><span>所有硬盘</span></Link>
+        <p className="finder-sidebar-label">位置</p>
+        {disks.map(device => <Link key={device.id} to={route(device.id)} data-active={device.id === disk?.id} aria-current={device.id === disk?.id ? 'location' : undefined}
           title={[device.id, ...device.volumes.map(volume => volume.mount), device.model, diskKind(device)].filter(Boolean).join(' · ')}>
-          <Glyph name="disk" /><span>{diskName(device)}</span>
+          <Icon name="drive" /><span>{diskName(device)}</span>{(device.system || device.mayWake) && <span className="finder-disk-badge"><Icon name={device.system ? 'warning' : 'moon'} /></span>}
         </Link>)}
+        {!!tagged.length && <><p className="finder-sidebar-label">收藏的位置</p>{tagged.map(key => <Link key={key} to={route(favorites[key] ? key : key.split('/').slice(0, -1).join('/'))} title={key} state={favorites[key] ? undefined : { selection: key }}><Icon name="star" /><span>{key.split('/').at(-1)}</span></Link>)}</>}
       </nav>
+      <div className="fp-sidebar-footer"><Icon name="drive" /><span><strong>{disks.length} 个硬盘</strong><small>{error ? '连接异常' : '仅枚举内核元数据'}</small></span></div>
     </aside>
-    <div className="finder-content">
-      <header className="finder-toolbar">
-        {!sidebar && <button className="finder-pill finder-sidebar-toggle" type="button" aria-label="显示边栏" onClick={toggleSidebar}><Glyph name="sidebar" /></button>}
-        <div className="finder-pill finder-history" role="group" aria-label="浏览历史">
-          <button type="button" aria-label="后退" title="后退" disabled={!back} onClick={back}><Glyph name="back" /></button>
-          <button type="button" aria-label="前进" title="前进" disabled={!forward} onClick={forward}><Glyph name="next" /></button>
-        </div>
-        <h1>{title}</h1>
-        <button className="finder-pill finder-refresh" type="button" aria-label="刷新硬盘" title="刷新硬盘"
-          disabled={loading} onClick={() => void refresh()}><Glyph name="refresh" /></button>
-        <div className="finder-pill finder-views" role="group" aria-label="显示方式">
-          {(Object.keys(modes) as Mode[]).map(mode => <button key={mode} type="button" aria-label={modes[mode]}
-            aria-pressed={view === mode} title={modes[mode]} onClick={() => setView(mode)}><Glyph name={mode} /></button>)}
-        </div>
-        <div className="finder-actions" ref={menuRef}>
-          <button className="finder-pill finder-order" type="button" aria-label="排序" aria-expanded={menu === 'sort'} onClick={() => showMenu('sort')}><Glyph name="sort" /><Glyph name="next" /></button>
-          <div className="finder-pill finder-tools">
-            <button type="button" aria-label="拷贝所在位置链接" title="拷贝所在位置链接" disabled={!selected} onClick={() => {
-              const url = new URL(window.location.href);
-              url.hash = route(selectedRef.current?.getAttribute('href')?.startsWith('#/files/') ? selected : selected.split('/').slice(0, -1).join('/'));
-              if (navigator.clipboard) {
-                void navigator.clipboard.writeText(url.href).catch(() => window.prompt('拷贝位置链接', url.href));
-              } else {
-                window.prompt('拷贝位置链接', url.href);
-              }
-            }}><Glyph name="share" /></button>
-            <button type="button" aria-label="切换蓝色标签" title="切换蓝色标签" disabled={!selected}
-              aria-pressed={tagged.includes(selected)} onClick={() => toggleTag(selected)}><Glyph name="tag" /></button>
-            <button type="button" aria-label="更多操作" aria-expanded={menu === 'more'} onClick={() => showMenu('more')}><Glyph name="more" /></button>
-          </div>
-          {menu && <div className="finder-menu" aria-label={menu === 'sort' ? '排序选项' : '更多操作'}>
-            {menu === 'sort' ? <>
-              <button type="button" onClick={() => { setDescending(false); setMenu(undefined); }}>{!descending ? '✓ ' : ''}名称升序</button>
-              <button type="button" onClick={() => { setDescending(true); setMenu(undefined); }}>{descending ? '✓ ' : ''}名称降序</button>
-              <hr /><button type="button" onClick={() => { setFoldersFirst(!foldersFirst); setMenu(undefined); }}>{foldersFirst ? '✓ ' : ''}文件夹排在前面</button>
-            </> : <>
-              <button type="button" disabled={!selected} onClick={() => { selectedRef.current?.click(); setMenu(undefined); }}>打开</button>
-              <hr /><button type="button" onClick={() => { toggleStatus(); setMenu(undefined); }}>{status ? '隐藏' : '显示'}路径栏和状态栏</button>
-            </>}
-          </div>}
-        </div>
-        {searching ? <label className="finder-pill finder-search"><Glyph name="search" /><input autoFocus type="search"
-          aria-label="搜索当前目录" placeholder="搜索" value={query} onChange={event => { setQuery(event.target.value); setSelected(''); }}
-          onBlur={() => { if (!query) setSearching(false); }} /></label>
-          : <button className="finder-pill finder-search-toggle" type="button" aria-label="搜索当前目录" title="搜索" onClick={() => setSearching(true)}><Glyph name="search" /></button>}
+    <div className="finder-content fp-content">
+      <header className="fp-locationbar">
+        {!sidebar && <button className="fp-refresh" type="button" aria-label="显示边栏" onClick={toggleSidebar}><Icon name="sidebar" /></button>}
+        <div className="fp-history" role="group" aria-label="浏览历史"><button type="button" aria-label="后退" disabled={!back} onClick={back}><Icon name="left" /></button><button type="button" aria-label="前进" disabled={!forward} onClick={forward}><Icon name="right" /></button></div>
+        <button className="fp-refresh" type="button" aria-label="刷新当前目录" disabled={loading} onClick={() => { if (activeURL) void readDirectory(path, activeURL); else void refresh(); }}><Icon name="refresh" /></button>
+        <nav className="fp-breadcrumb" aria-label="当前位置"><span><Link to={root}>所有硬盘</Link></span>{ancestors.slice(1).map(directory => <span key={directory}><Icon name="right" /><Link to={route(directory)}>{locationName(directory)}</Link></span>)}</nav>
+        <label className="fp-search"><Icon name="search" /><input ref={searchInput} type="search" aria-label="搜索当前目录" placeholder="搜索" value={query} onChange={event => { setQuery(event.target.value); setSelected(''); }} /></label>
       </header>
+      <div className="fp-actions">
+        <button type="button" disabled={!activeURL || disk?.system || gated} onClick={() => editItem(path)}><Icon name="folder" /><span>新建文件夹</span></button>
+        <button type="button" disabled={!copied || !pasteTarget(path)} onClick={() => void paste(path)}><Icon name="paste" /><span>粘贴</span></button>
+        <button type="button" disabled={!selectedItem || !disk || gated || disk.system} onClick={() => selectedItem && editItem(selectedItem.directory, selectedItem.entry)}><Icon name="rename" /><span>重命名</span></button>
+        <button type="button" disabled={!selectedItem || !disk || gated || disk.system} onClick={() => selectedItem && inspect('delete', selectedItem.directory, selectedItem.entry)}><Icon name="trash" /><span>删除</span></button>
+        <button type="button" aria-label="更多文件操作" onClick={event => { const rect = event.currentTarget.getBoundingClientRect(); showFileMenu(rect.left, rect.bottom + 6, selectedItem?.entry, selectedItem?.directory ?? path); }}><Icon name="more" /><span>更多</span></button>
+        <div className="fp-view-actions"><button type="button" aria-label="名称排序" aria-pressed={descending} onClick={() => setDescending(!descending)}><Icon name="sort" /></button><button type="button" aria-label={sidebar ? '隐藏边栏' : '显示边栏'} onClick={toggleSidebar}><Icon name="sidebar" /></button><div>{(Object.keys(modes) as Mode[]).map(mode => <button key={mode} type="button" aria-label={modes[mode]} aria-pressed={view === mode} title={modes[mode]} onClick={() => setView(mode)}><Icon name={mode === 'icons' ? 'apps' : mode} /></button>)}</div></div>
+      </div>
       <div className="finder-browser" ref={browserRef} tabIndex={-1} onContextMenu={event => showContext(event)}
         onClick={event => { if (event.target === event.currentTarget) setSelected(''); }}>
         {gated ? <div className="finder-disk-notice" role="region" aria-label="硬盘访问确认">
-          <Glyph name="disk" />
+          <Icon name={disk.system ? 'warning' : 'moon'} />
           <h2>{disk.system ? '系统盘，请谨慎修改' : '此硬盘可能正在休眠'}</h2>
           {disk.system && <p>这里是 Debian 系统盘。文件管理器以只读方式打开。</p>}
           {disk.mayWake && <p>继续读取目录可能会唤醒硬盘。</p>}
           <div><Link to={root}>返回硬盘列表</Link><button type="button" onClick={approve}>继续打开</button></div>
         </div> : message ? <p className="finder-empty" role="status">{message}</p> : <>
         {view === 'list' && <div className="finder-list">
-          <table>
+          <table className="fp-file-table">
             <thead><tr><th scope="col" aria-sort={descending ? 'descending' : 'ascending'}>
-              <button type="button" onClick={() => setDescending(!descending)}>名称<span data-descending={descending}><Glyph name="next" /></span></button>
-            </th><th scope="col">修改日期</th><th scope="col">大小</th><th scope="col">种类</th></tr></thead>
+              <button type="button" onClick={() => setDescending(!descending)}>名称<span data-descending={descending}><Icon name="right" /></span></button>
+            </th><th scope="col">修改时间</th><th scope="col">所在位置</th><th scope="col">类型</th><th scope="col">大小</th></tr></thead>
             <tbody>{listRows(rows, path)}</tbody>
           </table>
-          <div className="finder-stripes" aria-hidden="true" />
         </div>}
         {view === 'icons' && <ul className="finder-grid">{rows.map(entry => <li key={segment(entry)} data-selected={selected === entryPath(path, entry)}>
           {item(entry, path, <><FileIcon type={entry.kind} /><span>{entry.name}</span></>)}
@@ -541,7 +519,7 @@ function Finder({ path, inventory, disk, confirmed, approve, view, setView, onOp
         {view === 'columns' && <div className="finder-columns" ref={columnsRef}>{ancestors.map((directory, i) => <ul key={directory} aria-label={locationName(directory)}>
           {(i === ancestors.length - 1 ? rows : getRows(directory)).map(entry => <li key={segment(entry)}
             data-selected={ancestors[i + 1] === entryPath(directory, entry) || selected === entryPath(directory, entry)}>
-            {item(entry, directory, <><FileIcon type={entry.kind} /><span>{entry.name}</span>{entry.kind === 'directory' && <Glyph name="next" />}</>, true)}
+            {item(entry, directory, <><FileIcon type={entry.kind} /><span>{entry.name}</span>{entry.kind === 'directory' && <Icon name="right" />}</>, true)}
           </li>)}
         </ul>)}</div>}
         {view === 'gallery' && preview && <div className="finder-gallery">
@@ -557,36 +535,22 @@ function Finder({ path, inventory, disk, confirmed, approve, view, setView, onOp
         {!rows.length && <p className="finder-empty">{query.trim() ? '没有匹配的项目' : path ? '此目录为空' : '未发现硬盘'}</p>}
         </>}
       </div>
-      {context && <div ref={contextRef} tabIndex={-1} className="finder-menu finder-context-menu" aria-label="文件快捷操作"
-        style={{ left: context.x, top: context.y }}>
+      {context && <div ref={contextRef} tabIndex={-1} className="fp-context finder-context-menu" popover="manual" role="dialog" aria-label="文件快捷操作" style={{ left: context.x, top: context.y }}>
         {context.entry ? <>
-          <button type="button" onClick={() => { selectedRef.current?.click(); setContext(undefined); }}>打开</button>
-          {context.entry.kind !== 'directory' && context.source && disk && <button type="button" onClick={() => {
-            const url = diskURL(disk, entryPath(context.parent, context.entry!), 'file', confirmed);
-            if (url) window.location.assign(url + '&download=1');
-            setContext(undefined);
-          }}>下载</button>}
-          {context.source && <button type="button" onClick={() => { if (context.source) copy(context.source); }}>复制<span>⌘C</span></button>}
-          {context.entry.kind === 'directory' && disk && !disk.system &&
-            <button type="button" disabled={!copied || !pasteTarget(context.directory)} onClick={() => void paste(context.directory)}>粘贴到此文件夹</button>}
-          {context.source && disk && !disk.system &&
-            <button type="button" onClick={() => editItem(context.parent, context.entry)}>重命名</button>}
+          <button type="button" onClick={() => { selectedRef.current?.click(); setContext(undefined); }}><Icon name="external" />打开<span>↵</span></button>
+          {context.entry.kind !== 'directory' && context.source && disk && <button type="button" onClick={() => { const url = diskURL(disk, entryPath(context.parent, context.entry!), 'file', confirmed); if (url) window.location.assign(url + '&download=1'); setContext(undefined); }}><Icon name="download" />下载</button>}
+          <hr />
+          {context.source && <button type="button" onClick={() => { if (context.source) copy(context.source); }}><Icon name="copy" />复制<span>Ctrl/⌘ C</span></button>}
+          {context.entry.kind === 'directory' && disk && !disk.system && <button type="button" disabled={!copied || !pasteTarget(context.directory)} onClick={() => void paste(context.directory)}><Icon name="paste" />粘贴到此文件夹</button>}
+          {context.source && disk && !disk.system && <><button type="button" onClick={() => editItem(context.parent, context.entry)}><Icon name="rename" />重命名</button><button type="button" className="finder-danger" onClick={() => inspect('delete', context.parent, context.entry!)}><Icon name="trash" />删除</button></>}
+          <hr /><button type="button" onClick={() => { toggleTag(entryPath(context.parent, context.entry!), context.entry!.kind === 'directory'); setContext(undefined); }}><Icon name="star" />{tagged.includes(entryPath(context.parent, context.entry)) ? '取消收藏' : '收藏'}</button>
+          <button type="button" onClick={() => void copyLink(context.entry?.kind === 'directory' ? entryPath(context.parent, context.entry) : context.parent)}><Icon name="link" />复制位置链接</button>
+          <button type="button" onClick={() => inspect('details', context.parent, context.entry!)}><Icon name="info" />详细信息</button>
         </> : <>
-          {activeURL && disk && !disk.system && <>
-            <button type="button" onClick={() => editItem(context.directory)}>新建文件夹</button>
-            <button type="button" disabled={!copied || !pasteTarget(context.directory)} onClick={() => void paste(context.directory)}>粘贴项目<span>⌘V</span></button>
-          </>}
-          <button type="button" onClick={() => {
-            if (activeURL) void readDirectory(path, activeURL);
-            else void inventory.refresh();
-            setContext(undefined);
-          }}>{activeURL ? '刷新当前目录' : '刷新硬盘'}</button>
-          <button type="button" aria-expanded={!!context.sorting} onClick={() => setContext({ ...context, sorting: !context.sorting })}>排序方式<span>›</span></button>
-          {context.sorting && <>
-            <button type="button" onClick={() => { setDescending(false); setContext(undefined); }}>{!descending ? '✓ ' : ''}名称升序</button>
-            <button type="button" onClick={() => { setDescending(true); setContext(undefined); }}>{descending ? '✓ ' : ''}名称降序</button>
-            <button type="button" onClick={() => { setFoldersFirst(!foldersFirst); setContext(undefined); }}>{foldersFirst ? '✓ ' : ''}文件夹排在前面</button>
-          </>}
+          {activeURL && disk && !disk.system && <><button type="button" onClick={() => editItem(context.directory)}><Icon name="folder" />新建文件夹</button><button type="button" disabled={!copied || !pasteTarget(context.directory)} onClick={() => void paste(context.directory)}><Icon name="paste" />粘贴项目<span>Ctrl/⌘ V</span></button><hr /></>}
+          <button type="button" onClick={() => { if (activeURL) void readDirectory(path, activeURL); else void inventory.refresh(); setContext(undefined); }}><Icon name="refresh" />{activeURL ? '刷新当前目录' : '刷新硬盘'}</button>
+          <button type="button" onClick={() => { setDescending(!descending); setContext(undefined); }}><Icon name="sort" />{descending ? '名称升序' : '名称降序'}</button>
+          <button type="button" onClick={() => { setFoldersFirst(!foldersFirst); setContext(undefined); }}><Icon name="folder" />{foldersFirst ? '取消文件夹优先' : '文件夹排在前面'}</button>
         </>}
       </div>}
       {edit && <dialog ref={editDialog} className="finder-edit-dialog" aria-labelledby="finder-edit-title"
@@ -614,10 +578,16 @@ function Finder({ path, inventory, disk, confirmed, approve, view, setView, onOp
           </footer>
         </form>
       </dialog>}
+      {action && <dialog ref={actionDialog} className="fp-dialog finder-action-dialog" aria-labelledby="finder-action-title" onKeyDown={event => event.stopPropagation()} onCancel={event => { event.preventDefault(); if (!deleting) closeAction(); }}>
+        <h2 id="finder-action-title">{action.kind === 'delete' ? '永久删除项目' : action.kind === 'wake' ? '源硬盘可能正在休眠' : '详细信息'}</h2>
+        {action.kind === 'delete' ? <><div className="finder-warning-icon"><Icon name="warning" /></div><p>确定永久删除「{action.entry?.name}」？</p><p className="finder-action-note">文件夹及其中所有内容都会被删除，此操作无法恢复。</p></> : action.kind === 'wake' ? <><div className="finder-warning-icon"><Icon name="moon" /></div><p>粘贴需要重新读取源硬盘，可能将它从休眠中唤醒。</p></> : <dl><dt>名称</dt><dd>{action.entry?.name}</dd><dt>类型</dt><dd>{action.entry && (action.entry.detail ?? fileKinds[action.entry.kind])}</dd><dt>大小</dt><dd>{action.entry?.kind === 'directory' ? '—' : formatBytes(action.entry?.bytes ?? 0)}</dd><dt>修改时间</dt><dd>{action.entry?.modified ? new Date(action.entry.modified).toLocaleString('zh-CN') : '—'}</dd><dt>位置</dt><dd>{action.entry && entryPath(action.directory, action.entry)}</dd><dt>磁盘</dt><dd>{disk ? diskName(disk) : action.entry?.name}</dd></dl>}
+        {actionError && <p className="finder-edit-error" role="alert">{actionError}</p>}
+        <footer><button type="button" disabled={deleting} onClick={closeAction}>{action.kind === 'details' ? '关闭' : '取消'}</button>{action.kind === 'delete' && <button type="button" className="finder-delete-confirm" disabled={deleting} onClick={() => void deleteItem()}>{deleting ? '正在删除…' : '永久删除'}</button>}{action.kind === 'wake' && <button type="button" className="fp-primary" onClick={() => { const directory = action.directory; closeAction(); void paste(directory, true); }}>继续粘贴</button>}</footer>
+      </dialog>}
       {fileMessage && <p className="finder-file-message" role="status">{fileMessage}</p>}
-      {status && <footer className="finder-status">
-        <nav aria-label="当前路径"><Link to={root}><Glyph name="disk" />硬盘</Link>
-          {ancestors.slice(1).map((directory) => <span key={directory}><Glyph name="next" /><Link to={route(directory)}><FileIcon type="directory" />{locationName(directory)}</Link></span>)}
+      {<footer className="finder-status fp-file-status">
+        <nav aria-label="当前路径"><Link to={root}><Icon name="drive" />硬盘</Link>
+          {ancestors.slice(1).map((directory) => <span key={directory}><Icon name="right" /><Link to={route(directory)}><FileIcon type="directory" />{locationName(directory)}</Link></span>)}
         </nav>
         <span aria-live="polite">{selected ? '已选中 1 项，共 ' : ''}{rows.length} 个项目</span>
       </footer>}
@@ -626,6 +596,5 @@ function Finder({ path, inventory, disk, confirmed, approve, view, setView, onOp
 }
 
 function FileIcon({ type }: { type: string }) {
-  return type === 'directory' ? <img className="finder-file-icon" src={new URL('./assets/finder-folder.png', import.meta.url).href} alt="" />
-    : <span className="finder-file-icon finder-document"><Glyph name={type === 'image' ? 'media' : type === 'video' ? 'video' : 'file'} /></span>;
+  return type === 'directory' ? <span className="finder-file-icon"><Folder small /></span> : <span className={'finder-file-icon fp-document fp-document-' + type}><Icon name={type === 'image' ? 'image' : type === 'video' ? 'video' : 'text'} /></span>;
 }

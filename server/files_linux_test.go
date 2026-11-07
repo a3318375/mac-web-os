@@ -1,16 +1,46 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"golang.org/x/sys/unix"
 )
+
+func TestDeleteHandlerProtectsRealFiles(t *testing.T) {
+	root := t.TempDir()
+	var stat unix.Statx_t
+	if err := unix.Statx(unix.AT_FDCWD, root, 0, unix.STATX_MNT_ID, &stat); err != nil {
+		t.Fatal(err)
+	}
+	v := volume{ID: fmt.Sprint(stat.Mnt_id), Mount: root}
+	file := filepath.Join(root, "keep.txt")
+	if err := os.WriteFile(file, []byte("keep"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, device := range []*disk{{ID: "disk", System: true, Volumes: []volume{v}}, {ID: "disk", MayWake: true, Volumes: []volume{v}}} {
+		handler := editHandler(func() ([]*disk, error) { return []*disk{device}, nil })
+		body, _ := json.Marshal(map[string]any{"action": "delete", "confirmDelete": true, "name": "keep.txt", "directory": fileLocation{Disk: "disk", Volume: v.ID, Path: ".", Confirmed: device.System}})
+		request := httptest.NewRequest("POST", "/api/file-edit", bytes.NewReader(body))
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		handler(response, request)
+		if response.Code != 403 {
+			t.Fatalf("protection failed: %d %s", response.Code, response.Body)
+		}
+		if data, err := os.ReadFile(file); err != nil || string(data) != "keep" {
+			t.Fatalf("protected file changed: %q, %v", data, err)
+		}
+	}
+}
 
 func TestCopyFileKeepsExistingFilesAndCleansUpOnCancel(t *testing.T) {
 	root := t.TempDir()
@@ -127,5 +157,62 @@ func TestOpenVolumeRejectsLinksAndSpecialFiles(t *testing.T) {
 	if f, err := openVolume(v, "hello.txt", false); err == nil {
 		f.Close()
 		t.Fatal("accepted a mismatched mount ID")
+	}
+}
+
+func TestDeleteEntryStaysInsideVolume(t *testing.T) {
+	root, outside := t.TempDir(), t.TempDir()
+	var stat unix.Statx_t
+	if err := unix.Statx(unix.AT_FDCWD, root, 0, unix.STATX_MNT_ID, &stat); err != nil {
+		t.Fatal(err)
+	}
+	v := volume{ID: fmt.Sprint(stat.Mnt_id), Mount: root}
+	if err := os.MkdirAll(filepath.Join(root, "tree", "nested"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range []string{filepath.Join(root, "tree", "nested", "file"), filepath.Join(outside, "keep")} {
+		if err := os.WriteFile(file, []byte("keep"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "tree", "link")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "outside")); err != nil {
+		t.Fatal(err)
+	}
+	if err := deleteDirectoryEntry(context.Background(), v, ".", "outside"); err == nil {
+		t.Fatal("accepted a top-level symlink")
+	}
+	if err := deleteDirectoryEntry(context.Background(), v, ".", ".."); err == nil {
+		t.Fatal("accepted traversal")
+	}
+	wrong := v
+	wrong.ID = "0"
+	if err := deleteDirectoryEntry(context.Background(), wrong, ".", "tree"); err == nil {
+		t.Fatal("accepted mismatched mount")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := deleteDirectoryEntry(ctx, v, ".", "tree"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancel: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "tree", "nested", "file")); err != nil {
+		t.Fatal("cancel removed a file")
+	}
+	if err := deleteDirectoryEntry(context.Background(), v, ".", "tree"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "tree")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("tree still exists: %v", err)
+	}
+	if got, err := os.ReadFile(filepath.Join(outside, "keep")); err != nil || string(got) != "keep" {
+		t.Fatalf("outside file changed: %q, %v", got, err)
+	}
+	if err := os.Mkdir(filepath.Join(root, ".mac-web-os-copy-running"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := deleteDirectoryEntry(context.Background(), v, ".", ".mac-web-os-copy-running"); err == nil {
+		t.Fatal("deleted active staging")
 	}
 }

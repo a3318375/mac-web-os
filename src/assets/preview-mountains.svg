@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" fill="none">
+  <defs>
+    <linearGradient id="sky" x2="1200" y2="960" gradientUnits="userSpaceOnUse"><stop stop-color="#0a3853"/><stop offset=".48" stop-color="#79aabc"/><stop offset="1" stop-color="#ecede4"/></linearGradient>
+    <linearGradient id="far" x2="0" y2="1080" gradientUnits="userSpaceOnUse"><stop stop-color="#94b5bd"/><stop offset="1" stop-color="#558b9b"/></linearGradient>
+    <linearGradient id="mid" x2="1200" y2="1100" gradientUnits="userSpaceOnUse"><stop stop-color="#397589"/><stop offset="1" stop-color="#123f57"/></linearGradient>
+    <linearGradient id="near" x2="900" y2="1200" gradientUnits="userSpaceOnUse"><stop stop-color="#265969"/><stop offset="1" stop-color="#062b3e"/></linearGradient>
+    <radialGradient id="light"><stop stop-color="#f9f6e4" stop-opacity=".65"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+    <pattern id="trees" width="46" height="120" patternUnits="userSpaceOnUse"><path d="M23 4 5 58h10L1 93h20v27h4V93h20L31 58h10Z" fill="#092f40" opacity=".55"/></pattern>
+    <filter id="cloud"><feGaussianBlur stdDeviation="27"/></filter>
+  </defs>
+  <path fill="url(#sky)" d="M0 0h1920v1080H0z"/>
+  <ellipse cx="1600" cy="180" rx="650" ry="390" fill="url(#light)"/>
+  <g fill="#f9f5e8" opacity=".3" filter="url(#cloud)"><ellipse cx="1460" cy="180" rx="390" ry="35"/><ellipse cx="1750" cy="270" rx="420" ry="35"/><ellipse cx="950" cy="400" rx="500" ry="22"/></g>
+  <path d="m0 666 190-147 104 54 182-221 149 151 112-84 105 41 189-188 106 74 166-93 186 211 162-119 269 150v585H0Z" fill="url(#far)"/>
+  <path d="m294 573 182-221 149 151-149-102-28 62-27-12-46 66Zm548-113 189-188 106 74-106-23-57 76-25-10-35 54Zm461-167 186 211-112-90-42-53Z" fill="#d0e1e0" opacity=".7"/>
+  <path d="m0 735 96-63 114 34 192-152 184 177 126-80 110 73 119-34 169 155 189-180 162 79 240-307 219 261v382H0Z" fill="url(#mid)"/>
+  <path d="m1530 545 171-108 219 261-160-83-59-119-24 73-31-20-65 97-23-42Z" fill="#739da6" opacity=".58"/>
+  <path d="m210 706 192-152-71 153 34-6-98 91Zm902 139 187-180-66 142 71-38-109 142Z" fill="#23596d" opacity=".7"/>
+  <path d="m0 820 210-70 215 112 125-62 173 140 150-64 232 120 213-81 151-93 168 63 283-143v338H0Z" fill="url(#near)"/>
+  <path d="m0 940 210-82 169 58 170-9 223 173H0Zm1170 140 177-127 136-46 128 12 129-57 180-43v261Z" fill="url(#trees)"/>
+  <path d="m0 1020 190-68 164 82 203-41 191 87H0Zm1220 60 216-86 124 9 188-87 172 2v162Z" fill="#062735" opacity=".8"/>
+</svg>

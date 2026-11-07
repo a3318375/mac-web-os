@@ -12,15 +12,21 @@ import (
 func editHandler(scan inventory) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var edit struct {
-			Directory fileLocation
-			Name      string
-			OldName   string
+			Directory     fileLocation
+			Name          string
+			OldName       string
+			Action        string
+			ConfirmDelete bool
 		}
 		if r.Header.Get("Content-Type") != "application/json" ||
 			json.NewDecoder(http.MaxBytesReader(w, r.Body, 32<<10)).Decode(&edit) != nil ||
 			(edit.Directory.Path != "" && !fs.ValidPath(edit.Directory.Path)) || !visiblePath(edit.Directory.Path) || !validName(edit.Name) ||
 			(edit.OldName != "" && !validName(edit.OldName)) {
 			fail(w, 400, "文件名或目录无效。")
+			return
+		}
+		if edit.Action != "" && edit.Action != "delete" || edit.Action == "delete" && (!edit.ConfirmDelete || edit.OldName != "") {
+			fail(w, 400, "请确认删除操作。")
 			return
 		}
 		if edit.Directory.Path == "" {
@@ -43,12 +49,21 @@ func editHandler(scan inventory) http.HandlerFunc {
 				if v.ID != edit.Directory.Volume {
 					continue
 				}
-				err := editDirectory(v, edit.Directory.Path, edit.OldName, edit.Name)
+				var err error
+				if edit.Action == "delete" {
+					err = deleteDirectoryEntry(r.Context(), v, edit.Directory.Path, edit.Name)
+				} else {
+					err = editDirectory(v, edit.Directory.Path, edit.OldName, edit.Name)
+				}
 				switch {
 				case errors.Is(err, os.ErrExist):
 					fail(w, 409, "目标位置已有同名项目。")
 				case err != nil:
-					fail(w, 403, "无法修改目录，请检查项目是否仍存在。")
+					if edit.Action == "delete" {
+						fail(w, 403, "删除未完成，请刷新目录检查。部分内容可能已被删除；挂载点、正在复制的临时目录和不可访问的项目不会被继续处理。")
+					} else {
+						fail(w, 403, "无法修改目录，请检查项目是否仍存在。")
+					}
 				default:
 					jsonResponse(w, 200, struct{}{})
 				}

@@ -249,7 +249,7 @@ export default function Overview({ inventory }: { inventory: ReturnType<typeof u
   const seconds = current && previous ? (current.at - previous.at) / 1000 : 0;
   const { disks, loading, error: diskError, refresh } = inventory;
 
-  return <main className="overview">
+  return <section className="overview" aria-label="系统概览">
     <div className="overview-content">
       <div className="overview-section-head">
         <h1>资源概况</h1>
@@ -298,5 +298,5 @@ export default function Overview({ inventory }: { inventory: ReturnType<typeof u
         <HddWakeLog />
       </div>
     </div>
-  </main>;
+  </section>;
 }

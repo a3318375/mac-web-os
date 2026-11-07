@@ -61,6 +61,7 @@ func api(scan inventory) http.Handler {
 	mux.HandleFunc("GET /api/copy-tasks", tasks.list)
 	mux.HandleFunc("DELETE /api/copy-tasks", tasks.list)
 	mux.HandleFunc("GET /api/system/metrics", systemMetrics)
+	mux.HandleFunc("GET /api/system/processes", systemProcesses)
 	mux.HandleFunc("GET /api/system/sensors", systemSensors)
 	mux.HandleFunc("GET /api/system/hdd-wake-log", hddWakeLog)
 	mux.HandleFunc("GET /api/system/disks/{disk}/details", diskDetailsHandler(scan))
