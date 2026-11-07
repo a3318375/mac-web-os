@@ -27,7 +27,7 @@ func TestDeleteHandlerProtectsRealFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, device := range []*disk{{ID: "disk", System: true, Volumes: []volume{v}}, {ID: "disk", MayWake: true, Volumes: []volume{v}}} {
-		handler := editHandler(func() ([]*disk, error) { return []*disk{device}, nil })
+		handler := editHandler(func() ([]*disk, error) { return []*disk{device}, nil }, nil)
 		body, _ := json.Marshal(map[string]any{"action": "delete", "confirmDelete": true, "name": "keep.txt", "directory": fileLocation{Disk: "disk", Volume: v.ID, Path: ".", Confirmed: device.System}})
 		request := httptest.NewRequest("POST", "/api/file-edit", bytes.NewReader(body))
 		request.Header.Set("Content-Type", "application/json")
@@ -38,6 +38,51 @@ func TestDeleteHandlerProtectsRealFiles(t *testing.T) {
 		}
 		if data, err := os.ReadFile(file); err != nil || string(data) != "keep" {
 			t.Fatalf("protected file changed: %q, %v", data, err)
+		}
+	}
+}
+
+func TestFileEditsProduceAccurateLogs(t *testing.T) {
+	root := t.TempDir()
+	var stat unix.Statx_t
+	if err := unix.Statx(unix.AT_FDCWD, root, 0, unix.STATX_MNT_ID, &stat); err != nil {
+		t.Fatal(err)
+	}
+	v := volume{ID: fmt.Sprint(stat.Mnt_id), Mount: root}
+	logs := newOperationLogs()
+	handler := editHandler(func() ([]*disk, error) { return []*disk{{ID: "disk", Volumes: []volume{v}}}, nil }, logs)
+	for _, operation := range []struct {
+		name, old, action, expected string
+		status                      int
+	}{
+		{"folder", "", "", "create", 200},
+		{"folder", "", "", "create", 409},
+		{"renamed", "folder", "", "rename", 200},
+		{"renamed", "", "delete", "delete", 200},
+	} {
+		body, _ := json.Marshal(map[string]any{"directory": fileLocation{Disk: "disk", Volume: v.ID, Path: "."}, "name": operation.name, "oldName": operation.old, "action": operation.action, "confirmDelete": true})
+		r := httptest.NewRequest("POST", "/api/file-edit", bytes.NewReader(body))
+		r.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler(w, r)
+		if w.Code != operation.status {
+			t.Fatalf("%s: %d %s", operation.expected, w.Code, w.Body)
+		}
+		item := logs.items[0]
+		if item.Action != operation.expected || item.FinishedAt == nil || item.FinishedAt.Before(item.At) {
+			t.Fatalf("invalid record: %+v", item)
+		}
+		if operation.status != 200 && (item.State != "failed" || item.Error == "") {
+			t.Fatal("failure logged as success")
+		}
+		if operation.status == 200 && item.State != "done" {
+			t.Fatal("success logged as failure")
+		}
+		if operation.action == "delete" && (item.Source != filepath.Join(root, operation.name) || item.Target != "") {
+			t.Fatal("invalid deletion path")
+		}
+		if operation.old != "" && (item.Source != filepath.Join(root, operation.old) || item.Target != filepath.Join(root, operation.name)) {
+			t.Fatal("invalid rename paths")
 		}
 	}
 }

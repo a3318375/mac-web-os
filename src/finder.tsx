@@ -341,7 +341,7 @@ function Finder({ path, inventory, disk, confirmed, approve, view, setView, onOp
       });
       const url = disk && diskURL(disk, directory, 'entries', confirmed);
       if (url) setPendingCopies(current => [...current, { id: result.id, directory, url, name: copied.name }]);
-      setFileMessage('已加入复制任务，可在程序坞查看进度。');
+      setFileMessage('已加入复制队列，可在“日志”查看进度。');
     } catch (reason) {
       setFileMessage(reason instanceof Error ? reason.message : '粘贴失败。');
     } finally {
@@ -489,10 +489,10 @@ function Finder({ path, inventory, disk, confirmed, approve, view, setView, onOp
         <label className="fp-search"><Icon name="search" /><input ref={searchInput} type="search" aria-label="搜索当前目录" placeholder="搜索" value={query} onChange={event => { setQuery(event.target.value); setSelected(''); }} /></label>
       </header>
       <div className="fp-actions">
-        <button type="button" disabled={!activeURL || disk?.system || gated} onClick={() => editItem(path)}><Icon name="folder" /><span>新建文件夹</span></button>
-        <button type="button" disabled={!copied || !pasteTarget(path)} onClick={() => void paste(path)}><Icon name="paste" /><span>粘贴</span></button>
-        <button type="button" disabled={!selectedItem || !disk || gated || disk.system} onClick={() => selectedItem && editItem(selectedItem.directory, selectedItem.entry)}><Icon name="rename" /><span>重命名</span></button>
-        <button type="button" disabled={!selectedItem || !disk || gated || disk.system} onClick={() => selectedItem && inspect('delete', selectedItem.directory, selectedItem.entry)}><Icon name="trash" /><span>删除</span></button>
+        <button type="button" aria-label="新建文件夹" title="新建文件夹" disabled={!activeURL || disk?.system || gated} onClick={() => editItem(path)}><Icon name="folder" /><span>新建文件夹</span></button>
+        <button type="button" aria-label="粘贴" title="粘贴" disabled={!copied || !pasteTarget(path)} onClick={() => void paste(path)}><Icon name="paste" /><span>粘贴</span></button>
+        <button type="button" aria-label="重命名" title="重命名" disabled={!selectedItem || !disk || gated || disk.system} onClick={() => selectedItem && editItem(selectedItem.directory, selectedItem.entry)}><Icon name="rename" /><span>重命名</span></button>
+        <button type="button" aria-label="删除" title="删除" disabled={!selectedItem || !disk || gated || disk.system} onClick={() => selectedItem && inspect('delete', selectedItem.directory, selectedItem.entry)}><Icon name="trash" /><span>删除</span></button>
         <button type="button" aria-label="更多文件操作" onClick={event => { const rect = event.currentTarget.getBoundingClientRect(); showFileMenu(rect.left, rect.bottom + 6, selectedItem?.entry, selectedItem?.directory ?? path); }}><Icon name="more" /><span>更多</span></button>
         <div className="fp-view-actions"><button type="button" aria-label="名称排序" aria-pressed={descending} onClick={() => setDescending(!descending)}><Icon name="sort" /></button><button type="button" aria-label={sidebar ? '隐藏边栏' : '显示边栏'} onClick={toggleSidebar}><Icon name="sidebar" /></button><div>{(Object.keys(modes) as Mode[]).map(mode => <button key={mode} type="button" aria-label={modes[mode]} aria-pressed={view === mode} title={modes[mode]} onClick={() => setView(mode)}><Icon name={mode === 'icons' ? 'apps' : mode} /></button>)}</div></div>
       </div>

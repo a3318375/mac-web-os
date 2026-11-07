@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"time"
 )
 
 type copyTask struct {
@@ -28,6 +29,7 @@ type copyTasks struct {
 	next  int
 	items []*copyTask
 	queue chan func()
+	logs  *operationLogs
 }
 
 func newCopyTasks() *copyTasks {
@@ -75,10 +77,17 @@ func (tasks *copyTasks) submit(w http.ResponseWriter, source, target string, run
 	defer tasks.mu.Unlock()
 	tasks.next++
 	item := &copyTask{ID: tasks.next, Source: source, Target: target, State: "queued"}
+	logID := 0
+	lastLog := time.Time{}
 	update := func(change func(*copyTask)) {
 		tasks.mu.Lock()
 		defer tasks.mu.Unlock()
+		previous := item.State
 		change(item)
+		if tasks.logs != nil && (item.State != previous || time.Since(lastLog) >= 200*time.Millisecond) {
+			tasks.logs.updateCopy(logID, *item)
+			lastLog = time.Now()
+		}
 	}
 	select {
 	case tasks.queue <- func() {
@@ -92,6 +101,10 @@ func (tasks *copyTasks) submit(w http.ResponseWriter, source, target string, run
 			}
 		})
 	}:
+		if tasks.logs != nil {
+			logID = tasks.logs.record(operationRecord{Action: "copy", Source: source, Target: target, State: "queued"})
+			tasks.logs.updateCopy(logID, *item)
+		}
 		tasks.items = append([]*copyTask{item}, tasks.items...)
 		if len(tasks.items) > 100 {
 			tasks.items = tasks.items[:100]

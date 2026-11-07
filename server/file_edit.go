@@ -6,10 +6,12 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"path"
 	"strings"
+	"time"
 )
 
-func editHandler(scan inventory) http.HandlerFunc {
+func editHandler(scan inventory, history *operationLogs) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var edit struct {
 			Directory     fileLocation
@@ -50,10 +52,31 @@ func editHandler(scan inventory) http.HandlerFunc {
 					continue
 				}
 				var err error
+				started := time.Now()
 				if edit.Action == "delete" {
 					err = deleteDirectoryEntry(r.Context(), v, edit.Directory.Path, edit.Name)
 				} else {
 					err = editDirectory(v, edit.Directory.Path, edit.OldName, edit.Name)
+				}
+				if history != nil {
+					now := time.Now()
+					item := operationRecord{At: started, Action: "create", Target: path.Join(v.Mount, edit.Directory.Path, edit.Name), State: "done", FinishedAt: &now}
+					if edit.Action == "delete" {
+						item.Action, item.Source, item.Target = "delete", item.Target, ""
+					}
+					if edit.OldName != "" {
+						item.Action, item.Source = "rename", path.Join(v.Mount, edit.Directory.Path, edit.OldName)
+					}
+					if err != nil {
+						item.State, item.Error = "failed", "操作未完成，请刷新目录检查。"
+						if errors.Is(err, os.ErrExist) {
+							item.Error = "目标位置已有同名项目。"
+						}
+						if edit.Action == "delete" {
+							item.Error = "删除未完成，部分内容可能已被删除，请刷新目录检查。"
+						}
+					}
+					history.record(item)
 				}
 				switch {
 				case errors.Is(err, os.ErrExist):

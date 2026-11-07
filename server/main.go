@@ -56,8 +56,11 @@ func fail(w http.ResponseWriter, status int, message string) {
 func api(scan inventory) http.Handler {
 	mux := http.NewServeMux()
 	tasks := newCopyTasks()
+	logs := newOperationLogs()
+	tasks.logs = logs
 	mux.HandleFunc("POST /api/paste", pasteHandler(scan, tasks))
-	mux.HandleFunc("POST /api/file-edit", editHandler(scan))
+	mux.HandleFunc("POST /api/file-edit", editHandler(scan, logs))
+	mux.HandleFunc("GET /api/logs", logs.list)
 	mux.HandleFunc("GET /api/copy-tasks", tasks.list)
 	mux.HandleFunc("DELETE /api/copy-tasks", tasks.list)
 	mux.HandleFunc("GET /api/system/metrics", systemMetrics)

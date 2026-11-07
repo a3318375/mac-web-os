@@ -112,13 +112,13 @@
 .overview-volume { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; margin: 8px 0 0; padding-top: 8px; border-top: 1px solid var(--overview-line); font-size: 12px; overflow-wrap: anywhere; }
 .overview-disk-message { margin: 14px 0 0; color: var(--overview-muted); }
 
-@media (max-width: 1050px) {
+@container app-window (max-width: 1050px) {
   .overview-details { grid-template-columns: minmax(0, 1fr); }
 }
-@media (min-width: 1500px) {
+@container app-window (min-width: 1500px) {
   .overview-metrics { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 }
-@media (max-width: 690px) {
+@container app-window (max-width: 690px) {
   .overview-content { padding: 14px 12px 0; }
   .overview-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .overview-panel { padding: 12px; }

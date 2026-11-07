@@ -37,8 +37,8 @@
 .task-manager :is(td:first-child, th:first-child button) { padding-left: var(--task-edge-space); }
 .task-manager :is(td:last-child, th:last-child button) { padding-right: var(--task-edge-space); }
 .task-manager td:first-child { max-width: 280px; overflow: hidden; text-overflow: ellipsis; font-weight: 550; }
-.task-manager tbody tr:nth-child(even) { background: #f8fafd; }
-.task-manager tbody tr:hover { background: #edf3fc; }
+.task-manager tbody tr:nth-child(even) { background: var(--fp-hover); }
+.task-manager tbody tr:hover { background: var(--fp-selected); }
 .task-manager td small { color: var(--task-muted); font-size: 12px; }
 .task-cpu { color: var(--task-accent); font-weight: 600; }
 .task-state { color: var(--task-muted); }
@@ -46,7 +46,7 @@
 .task-footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 20px; padding: 10px var(--task-edge-space); background: var(--fp-bg);  color: var(--task-muted); font-size: 12px; }
 .task-footer > span:nth-of-type(2) { flex-basis: 100%; }
 .task-empty { padding: 30px 16px; color: var(--task-muted); text-align: center; }
-@media (max-width: 690px) {
+@container app-window (max-width: 690px) {
   .task-manager { --task-edge-space: 12px; padding-inline: 8px; }
   .task-summary { gap: 16px; }
   .task-toolbar label, .task-toolbar input { width: 100%; }

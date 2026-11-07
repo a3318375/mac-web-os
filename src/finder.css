@@ -88,8 +88,8 @@
 .finder-status nav .finder-file-icon { display: none; }
 .finder-status nav svg { width: 12px; height: 12px; }
 .finder-status > span { flex: none; }
-@media (max-width: 1000px) { .finder { grid-template-columns: 176px minmax(0, 1fr); } .finder .fp-actions { flex-wrap: wrap; } .finder-list { padding-inline: 12px; } }
-@media (max-width: 690px) {
+@container app-window (max-width: 1000px) { .finder { grid-template-columns: 176px minmax(0, 1fr); } .finder .fp-actions { flex-wrap: wrap; } .finder-list { padding-inline: 12px; } }
+@container app-window (max-width: 690px) {
   .finder { grid-template-columns: 142px minmax(0, 1fr); padding-right: 6px; padding-bottom: 6px; }
   .finder .fp-sidebar nav { padding-inline: 6px; }
   .finder .fp-sidebar nav a { gap: 7px; padding-inline: 7px; font-size: 12px; }

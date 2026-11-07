@@ -24,7 +24,7 @@ func TestDeleteRequestGuards(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			handler := editHandler(func() ([]*disk, error) {
 				return []*disk{{ID: "disk", System: test.system, MayWake: test.wake, Volumes: []volume{{ID: "volume", Mount: "must-not-be-accessed"}}}}, nil
-			})
+			}, nil)
 			body, _ := json.Marshal(map[string]any{"action": "delete", "confirmDelete": test.consent, "name": test.file, "directory": fileLocation{Disk: "disk", Volume: "volume", Path: test.path, Confirmed: test.confirmed}})
 			r := httptest.NewRequest("POST", "/api/file-edit", bytes.NewReader(body))
 			r.Header.Set("Content-Type", "application/json")
